@@ -1,89 +1,179 @@
-# Smart Library — A1, A2, and Final
+# Smart Library — an integrated OS simulator (CS-3710)
 
-Group: **Kabir, Urvashi, Aarush, Samar**. Python 3.10+ and the standard library;
-no virtual environment or package installation is required. The maintained
-baseline is Python. The old C++ implementation is deprecated and is not needed.
+A library where **readers** queue for **reading seats**, are served by two
+**librarians**, and share named **books and journals**. Behind it are the
+three core operating-systems problems:
 
-| Stage | Library operation | OS concept |
+| Question | Stage | OS concept | What we built |
+|---|---|---|---|
+| *Who should be served next?* | **A1** Process management | CPU scheduling | FCFS and non-preemptive PRIORITY over two librarians |
+| *Where can the reader sit?* | **A2** Memory management | Contiguous allocation | First, Best and Worst Fit over 6 adjacent seats, strict FIFO admission, fragmentation |
+| *How can readers safely share books?* | **Final** Concurrency | Threads, locks, deadlock | Real worker threads, lock-protected ownership, ROLLBACK and ORDERED deadlock prevention |
+
+Each stage keeps everything from the stage before it. The Final program
+runs one integrated pipeline for every reader: arrival → seat admission →
+librarian scheduling → book acquire/block/release → completion. The
+simulation clock is virtual, but the book operations run on **real OS
+threads** under real locks.
+
+**Group:** Kabir, Urvashi, Aarush, Samar · **Language:** Python 3.10+,
+standard library only (no installs, no build step)
+
+---
+
+## Stage READMEs
+
+| Stage | README | Contents |
 |---|---|---|
-| A1 | Two librarians serve readers using FCFS/Priority | Process scheduling |
-| A2 | Readers reserve adjacent slots in a six-seat room | Contiguous allocation and FIFO admission |
-| Final | Readers acquire/release named books and journals | Real threads, synchronization, deadlock prevention |
+| **Final Project** | [Final-OS_Lab_Python/README.md](Final-OS_Lab_Python/README.md) | The full submission README: architecture, threads and synchronization, deadlock demo and prevention, measured results, trade-offs, assumptions, requirements checklist |
+| **Assignment 2** | [Assignment_2-OS_Lab_Python/README.md](Assignment_2-OS_Lab_Python/README.md) | Seat allocation, FIFO admission, metrics, six-way allocator comparison |
+| **Assignment 1** | [Assignment_1-OS_Lab_Python/README.md](Assignment_1-OS_Lab_Python/README.md) | Standalone Python A1 (the scheduling simulator) |
 
-## Current implementation
+Each folder also holds that stage's specification PDF.
 
-Aarush A1–A7 (including A7b/A7c), A9, and A10 are implemented: real/fake
-memory, 54 independently derived A2 golden exports, allocator/policy experiments,
-measured comparisons, complete A2 README, and runnable archive assembly.
-Optional A8 runtime visualization is not implemented.
+---
 
-Sam's parser/resource/worker/trace/deadlock modules are integrated. The audited
-worker-overlap, shared-tracer isolation, and action-order/diagnostic defects
-have regression fixes. The old unsupported policy-winner table is replaced
-with 720 measured runs. ROLLBACK remains the safe default; other known Final
-limits remain explicit in [the audit](docs/implementation_audit.md).
+## Quick start
 
-| Component | Owner | Status |
-|---|---|---|
-| Types, errors, Python A1, scheduler, parser, metrics, output | Kabir | Implemented; Python regressions pass |
-| Seat allocation, FIFO admission, occupancy | Aarush | Implemented; shared tests exercise real and independent fake |
-| Experiments, A2 examples/expected exports and comparison discussion | Aarush | Implemented; 6 allocator runs and 720 safe policy runs recorded |
-| Engine, CLI, independent ZIP builder | Urvashi | Integrated; extracted archives run their tests/commands |
-| Resources, real workers, tracing, policies, unsafe demo | Samar | Implemented with targeted fixes; remaining Final issues documented |
-
-Validation snapshot on Python 3.12.3: **173 root tests, 172 passed and one
-expected missing-module skip**; standalone A1 has 17 passing tests and 20/20
-golden cases. Test counts describe this revision, not all future changes.
-
-## Start here
-
-- [A2 complete README](Assignment_2-OS_Lab_Python/README.md): architecture,
-  input/export, metrics, six-way comparison, assumptions, and checklist.
-- [Final implementation README](Final-OS_Lab_Python/README.md): real worker
-  execution, policies, commands, measurements, and remaining limitations.
-- [Standalone Python A1](Assignment_1-OS_Lab_Python/README.md).
-- [Aarush guide and LaTeX/PDF](docs/aarush/README.md).
-- [Sam's concurrency guide](docs/readme/samar_concurrency_deadlock.md).
-- [Development guide](DEVELOPMENT.md), [task ownership](division_of_work.txt),
-  and [interface contract](library_sim.pyi).
-
-## Run and test
-
-From the source repository root:
+Everything runs from the repository root. The package lives in `src/`, so
+add it to the path:
 
 ```bash
+# Run all tests (173)
 python3 -m unittest discover -s tests -t . -v
+
+# Final: the spec's sample workload with contention, plus trace and statistics
+PYTHONPATH=src python3 -c 'import sys; from library_sim.cli import final_main; raise SystemExit(final_main(sys.argv[1:]))' \
+    inputs/spec_sample.txt FCFS FIRST_FIT output.txt --trace - --stats
+
+# Final: bounded deadlock demo (NONE deadlocks; ROLLBACK and ORDERED complete)
+PYTHONPATH=src python3 -c 'import sys; from library_sim.cli import final_main; raise SystemExit(final_main(sys.argv[1:]))' --demo-deadlock
+
+# A2: allocation run
+PYTHONPATH=src python3 -c 'import sys; from library_sim.cli import a2_main; raise SystemExit(a2_main(sys.argv[1:]))' \
+    inputs/a2/comparison.txt PRIORITY BEST_FIT output.txt
+
+# Comparisons
 PYTHONPATH=src python3 -m library_sim.experiments allocators inputs/a2/comparison.txt
 PYTHONPATH=src python3 -m library_sim.experiments policies inputs/policy/*.txt --repeats 30 --md policy-report.md
-PYTHONPATH=src python3 -c 'import sys; from library_sim.cli import a2_main; raise SystemExit(a2_main(sys.argv[1:]))' inputs/a2/comparison.txt FCFS FIRST_FIT output.txt
-PYTHONPATH=src python3 -c 'import sys; from library_sim.cli import final_main; raise SystemExit(final_main(sys.argv[1:]))' inputs/spec_sample.txt FCFS FIRST_FIT final-output.txt --trace trace.txt --stats
+
+# Build the two submission archives
 python3 build_packages.py
 ```
 
-The build creates `dist/a2.zip` and `dist/final.zip`, extracts them, clears
-source-path assistance, and verifies tests, six CLI combinations, allocator
-experiments, and (Final) policy experiments and default deadlock demo. Both
-archives include READMEs, documentation, inputs, and applicable tests. A2
-excludes all five Final-only library modules. Extract either ZIP and use
-`python3 main.py ...` from its directory; no build/install step is needed there.
+`build_packages.py` writes **`dist/a2.zip`** and **`dist/final.zip`**, the two
+independent submissions. Each unzipped archive has its own `main.py`, so
+you run it as:
 
-## Evidence and design rules
+```bash
+python3 main.py INPUT_FILE {FCFS|PRIORITY} {FIRST_FIT|BEST_FIT|WORST_FIT} OUTPUT_FILE   # plus Final options
+```
 
-[Manual fixture checks](docs/aarush/fixture_checks.md),
-[full independent workbook](docs/aarush/fixture_derivations.md),
+**Build checks.** The script unzips each archive into a clean folder and
+checks it there with a plain `python3`:
+- the test suite;
+- all six scheduler × allocator combinations;
+- the experiments;
+- for Final, the deadlock demo.
+
+The A2 archive contains none of the five Final-only modules.
+
+---
+
+## What the output looks like
+
+The spec's two-reader sample (`inputs/spec_sample.txt`). Both readers race
+for `REFERENCE_BOOK` on two worker threads:
+
+```text
+PROCESS,R1,0,1,6,0,11,5,11,0,0,0,0,5
+PROCESS,R2,0,3,6,0,6,0,6,0,0,0,0,0
+SUMMARY,AVERAGE_WAITING,2.5000
+...
+POOL,SPACE,6,2,25.7576,0
+RESOURCE,JOURNAL,1,1,2,0
+RESOURCE,REFERENCE_BOOK,1,1,2,1
+CHECK,EXCLUSIVITY_VIOLATIONS,0
+CHECK,UNRESOLVED_DEADLOCKS,0
+CHECK,COMPLETED_COUNT,2
+```
+
+The trace (`--trace -`) shows which thread did what, at what virtual time:
+
+```text
+[t=0 #9 worker-2] R2 ACQUIRE REFERENCE_BOOK
+[t=0 #10 worker-1] R1 BLOCK REFERENCE_BOOK (held by R2)
+[overlap] worker-1 [...] and worker-2 [...] in real execution
+[t=5 #14 worker-2] R1 HANDOFF REFERENCE_BOOK (from R2)
+[t=5 #15 MainThread] R1 UNBLOCK
+```
+
+---
+
+## Key results
+
+- **Allocators** (`inputs/a2/comparison.txt`, FCFS): maximum external
+  fragmentation is 2 for First Fit, 0 for Best Fit and 1 for Worst Fit.
+  PRIORITY raises average waiting from 5.50 to 5.90 compared with FCFS.
+- **Deadlock prevention:** 720 measured runs (6 workloads × 2 schedulers ×
+  2 policies × 30). All completed, with 0 exclusivity violations and
+  0 deadlocks.
+  - On the 12-reader stress workload, the default **ROLLBACK** policy had
+    about 20 % lower average waiting than ORDERED.
+  - It had roughly half the worst-case resource wait.
+  - It never held a book while waiting.
+- **Correctness evidence:**
+  - With no seat limit, the engine reproduces A1 exactly on 211 inputs.
+  - All 54 hand-checked A2 expected outputs are reproduced byte for byte.
+  - Resource-free Final runs equal A2 exactly.
+  - Random stress runs found no violation, deadlock or hang.
+
+Details and full tables:
+[Final README §13–14](Final-OS_Lab_Python/README.md#13-observed-comparison-results),
 [allocator results](docs/aarush/allocator_comparison.md),
-[policy spreads](docs/aarush/policy_comparison.md), and
-[real overlap trace](docs/aarush/overlap_evidence.txt) support the implementation.
-The policy JSON retains the measured snapshot and instrumentation; wall times
-and racing Final outcomes can vary on reruns.
+[policy results](docs/aarush/policy_comparison.md).
 
-Only the coordinator mutates readers/ready/admission/seats; workers operate
-through locked managers. No sleep or busy-wait drives simulation correctness.
-Keep graded exports free of diagnostic prose. Preserve the interface contract,
-run conformance and relevant regressions before sharing changes, and update
-README/PDF claims from observations rather than expected winners.
+---
 
-The specification PDFs remain in the three stage directories. Earlier notes
-referenced `context.md`; that file is absent, so the checked-in contracts and
-PDFs are the available references. Historical TA-approval labels are not new
-claims of independently verified approval.
+## Repository layout
+
+```text
+src/library_sim/              the shared Python package used by A2 and Final
+  models.py, errors.py          types, lifecycle, constants
+  parser.py, resource_parser.py input validation (A2 section, then R/K sections)
+  scheduler.py                  FCFS / PRIORITY ready queue
+  memory.py                     SeatPool (First/Best/Worst Fit), FIFO admission, occupancy
+  engine.py                     discrete-event coordinator: virtual clock, event order
+  workers.py                    real worker threads (ThreadPoolExecutor)
+  resources.py                  lock-protected book ownership and prevention policies
+  deadlock.py                   policies, ranks, cycle detection, bounded unsafe demo
+  trace.py                      thread-safe event trace and exclusivity replay
+  metrics.py, output.py         metrics and the exact output format
+  cli.py, experiments.py        command line, comparison tool
+  a1.py                         Python A1 port (reference for regression tests)
+library_sim.pyi               interface contract every module is tested against
+inputs/                       spec sample, deadlock/integration demos, a2/ edge cases, policy/ workloads
+tests/                        contract/ (per module), integration/, fakes/, expected/a2/ golden outputs
+docs/                         per-member guides, measurements, implementation audit, memory-management PDF
+Assignment_1-OS_Lab_Python/   standalone A1 (Python port, 20/20 golden cases)
+Assignment_1-OS_Lab_C++/      original C++ A1 (deprecated; kept for reference)
+Assignment_2-OS_Lab_Python/   A2 README and specification
+Final-OS_Lab_Python/          Final README and specification
+build_packages.py             builds and checks dist/a2.zip and dist/final.zip
+```
+
+---
+
+## Team
+
+| Member | Responsibility |
+|---|---|
+| **Kabir** | Python A1 port; shared models, scheduler, parser, metrics, output; interface contract |
+| **Aarush** | Seat allocation and FIFO admission; experiments; A2 edge cases and expected outputs; A2 README |
+| **Urvashi** | Simulation engine, command line, packaging, integration |
+| **Samar** | Resource parsing, worker threads, resource manager, tracing, deadlock prevention and demo |
+
+More detail: [development guide](DEVELOPMENT.md),
+[division of work](division_of_work.txt), and the
+[implementation audit](docs/implementation_audit.md), which lists known
+limitations.
