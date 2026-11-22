@@ -1,0 +1,606 @@
+URVASHI NOTES
+================
+
+IMPLEMENTATION STATUS
+---------------------
+
+- src/library_sim/engine.py
+- src/library_sim/cli.py
+- tests/fakes/fake_engine.py
+- tests/contract/test_engine_fake_contract.py
+- build_packages.py
+- docs/readme/urvashi_engine_cli.md
+
+1. ENGINE
+---------
+
+src/library_sim/engine.py implements the public CheckStats,
+SimulationResult, Simulation, and simulate() contracts from library_sim.pyi.
+
+Design decisions:
+
+- The engine is the only coordinator that owns Reader objects, ReadyQueue,
+  SeatPool, and AdmissionQueue. Worker threads are not given Reader objects.
+- Virtual time is an integer and is advanced with arrival/completion/action event calculations. The code does not use sleep() or wall-clock time for simulation correctness.
+- Wall-clock performance is stored only in SimulationResult.wall_time_s,
+  using time.perf_counter(), and is separate from virtual time.
+- Every reader state change uses Reader.transition(). This prevents illegal lifecycle changes and relies on the shared transition table from models.py.
+- Completions are processed before arrivals at a timestamp, and arrivals
+  are processed by ascending string ID. This follows the TA-approved event order.
+- Admission occurs through Aarush's AdmissionQueue, and admitted readers
+  receive M=t and are added to ReadyQueue.
+- Librarians are filled in ascending index 0, then 1. Only READY readers
+  from ReadyQueue are dispatched.
+- S is set on the reader's first dispatch and never overwritten.
+- C is set when service completes and the reader becomes TERMINATED.
+- OccupancyTracker.sample(t, pool) is called once after timestamp processing.
+- _finish() converts completed readers into immutable ReaderResult records
+  and sorts results for output/metrics.
+
+The A2 loop is the resource-free baseline. It does not import Samar's
+resource modules. This is intentional:
+
+[CONTRACT 6] A2 mode must run if resource_parser.py, trace.py, resources.py,
+workers.py, and deadlock.py are absent.
+
+In resource-free Final mode, the engine calls the same A2 loop and adds
+CheckStats(0, 0, N), with no resource results. This reproduces A2 behavior
+for scheduling and memory.
+
+The resource-bearing Final loop:
+
+- submits action batches to Samar's WorkerPool;
+- applies done/blocked results before processing woken readers;
+- advances reader.next_action after an action batch;
+- does not re-run a blocked ACQUIRE after wake-up;
+- increments resource_wait only by virtual time spent blocked;
+- frees a librarian when a reader blocks on a resource;
+- keeps seats until the reader completes;
+- asks Samar's find_cycles(wait_for_graph()) when no future event remains.
+
+The Final implementation is dependency-ready but cannot be fully verified
+until Samar's ResourceManager, WorkerPool, Tracer, and deadlock interfaces
+exist.
+
+
+2. CLI
+------
+
+src/library_sim/cli.py implements a2_main(argv) and final_main(argv).
+
+Design decisions:
+
+- Each function returns an integer exit code instead of calling sys.exit().
+  This makes the CLI directly testable.
+- Both enum values are parsed case-sensitively using Scheduler(...) and
+  Allocator(...).
+- Bad arguments raise UsageError and are printed as "Error: ..." to stderr.
+- Bad input raises InputError and follows the existing line-number behavior.
+- No output file is intentionally written if parsing or simulation fails.
+- A2 mode:
+  * requires exactly four arguments;
+  * imports only A2 foundation modules plus engine/memory;
+  * never exposes policy, trace, or stats options.
+- Final mode:
+  * parses --trace FILE|-;
+  * parses --policy ROLLBACK|ORDERED;
+  * parses --stats;
+  * parses --quiet;
+  * sends traces to a file or stderr;
+  * keeps policy statistics and wall time out of the graded output file.
+- final_main() returns exit status 2 if incomplete readers remain.
+- --demo-deadlock delegates to Samar's run_unsafe_demo(); this is not a
+  demo-only engine or locking implementation.
+
+
+3. SHARED ENGINE FAKE
+---------------------
+
+tests/fakes/fake_engine.py was added to the shared fake directory.
+
+It:
+
+- has the same simulate() shape used by downstream modules;
+- does not depend on memory.py or Final-only modules;
+- returns a valid fixed ReaderResult and PoolStats shape;
+- lets Aarush build experiments.py and Samar build their demo integration
+  before the real engine is complete.
+
+tests/contract/test_engine_fake_contract.py verifies the fake's public result
+shape. It is not a private fake and is intended for the whole team.
+
+
+4. PACKAGING
+------------
+
+build_packages.py creates independent A2 and Final zips in dist/.
+
+The A2 stage copies shared package modules and excludes:
+
+- resource_parser.py
+- trace.py
+- resources.py
+- workers.py
+- deadlock.py
+
+This prevents the A2 submission from depending on Final-only modules.
+The build script:
+
+- stages separate A2 and Final packages;
+- writes a small mode-specific main.py;
+- creates dist/a2.zip and dist/final.zip;
+- extracts each archive;
+- smoke-tests package importability from a clean directory.
+
+The script requires memory.py before building, and Final packaging can only
+be fully tested after Samar's modules exist.
+
+
+5. TESTING COMPLETED SO FAR
+---------------------------
+
+From the repository root:
+
+    python3 -m unittest tests.contract.test_engine_fake_contract \
+      tests.contract.test_pyi_conformance -v
+
+This passed:
+
+- fake engine result shape;
+- engine/CLI dataclass and function conformance with library_sim.pyi.
+
+Syntax validation passed with:
+
+    python3 -m py_compile src/library_sim/engine.py \
+      src/library_sim/cli.py tests/fakes/fake_engine.py build_packages.py
+
+A small in-memory memory collaborator smoke test verified:
+
+- simultaneous arrivals;
+- lower-numbered librarian fill;
+- expected START and COMPLETION timestamps;
+- no incomplete readers.
+
+The complete suite command is:
+
+    python3 -m unittest discover -s tests -t . -v
+
+The available suite currently passes 43 tests and one engine-vs-A1 test is
+skipped because memory.py and engine integration are not complete enough for
+the existing cross-check. Two A1 fixture tests fail because
+Assignment_1-OS_Lab_C++/tests/inputs and tests/expected are absent in this
+checkout.
+
+
+6. RUNNING FROM THE REPOSITORY ROOT
+-----------------------------------
+
+Do not run module test names from inside the tests/ directory. unittest needs
+the repository root on sys.path so tests.contract can be imported.
+
+    cd /Users/urvashibalasubramaniam/Documents/GitHub/OS_A2_and_Final
+    python3 -m unittest tests.contract.test_engine_fake_contract \
+      tests.contract.test_pyi_conformance -v
+
+After memory.py exists, run the A1 cross-check:
+
+    python3 -m unittest tests.integration.test_engine_vs_a1 -v
+
+After both collaborators exist, build submissions:
+
+    python3 build_packages.py
+
+The resulting archives are dist/a2.zip and dist/final.zip.
+
+
+7. REMAINING URVASHI WORK
+-------------------------
+
+The following is not complete until the collaborators are done:
+
+- real A2 integration testing against memory.py;
+- real engine-vs-A1 cross-check;
+- resource-bearing Final loop integration with Samar's modules;
+- policy and trace smoke tests;
+- independent A2 zip smoke test;
+- independent Final zip smoke test;
+- integration cases U9a-f;
+- assembly of Urvashi's README/presentation material;
+- any bugs found when real modules replace fakes.
+
+
+**************
+
+EXTENSIVE EXPLANATION:
+
+8. VIVA GLOSSARY: BASIC TERMS AND PROCESSES
+-------------------------------------------
+
+8.1 Project stages
+
+- Smart Library: one simulator for A1 process management, A2 memory
+  management, and the Final concurrency/deadlock project.
+- A1: readers are processes-like jobs and two librarians are processors.
+- A2: adds six contiguous reading seats and first/best/worst-fit allocation.
+- Final: adds named shared resources, real Python threads, locking, tracing,
+  deadlock detection, and ROLLBACK/ORDERED prevention.
+
+The `.pyi` file is the source of truth. Its signatures and contract rules
+must not be changed without team agreement. One module owns one area:
+scheduling, memory, engine coordination, resources, workers, deadlocks,
+metrics, output, or CLI.
+
+
+8.2 Reader terminology
+
+- ReaderSpec: immutable input data: ID, arrival, priority, service, category,
+  seat requirement, and table requirement.
+- Reader: mutable runtime state owned by the engine coordinator.
+- ReaderResult: immutable timestamps for a completed reader: ID, A, priority,
+  B, S, C, M, and resource wait.
+- A: arrival time.
+- M: memory-seat admission time.
+- S: first librarian dispatch time, even if the reader immediately blocks on
+  a resource at offset zero.
+- C: completion time.
+- B: total service units.
+- W: waiting = C-A-B.
+- Resource wait: virtual time in BLOCKED_RESOURCE.
+
+
+8.3 Reader states
+
+A reader state describes its lifecycle, not the data structure it is stored
+in.
+
+- NEW: created, not yet arrived or admitted.
+- BLOCKED_MEMORY: has arrived but is waiting for contiguous seats.
+- READY: has seats and is waiting for a librarian.
+- RUNNING: holds a librarian and is executing/allowed to execute.
+- BLOCKED_RESOURCE: holds seats but has voluntarily given up its librarian
+  while waiting for resources.
+- TERMINATED: completed; its seat and librarian are released.
+
+Legally, transitions are:
+
+    NEW -> BLOCKED_MEMORY or READY
+    BLOCKED_MEMORY -> READY
+    READY -> RUNNING
+    RUNNING -> BLOCKED_RESOURCE or TERMINATED
+    BLOCKED_RESOURCE -> READY
+
+Every change must use Reader.transition(). This method uses
+LEGAL_TRANSITIONS and raises AssertionError for an illegal state change.
+For example, READY -> TERMINATED is illegal because a reader must run before
+completion.
+
+
+8.4 ReadyQueue
+
+- ReadyQueue is a heap-based priority queue of memory-admitted readers.
+- It belongs to scheduling. It contains readers with seats, not necessarily
+  running readers.
+- FCFS key: (arrival, id). EARLIER arrival wins; plain-string ID breaks ties.
+- PRIORITY key: (priority, arrival, id). Smaller priority number is more
+  important.
+- "R10" sorts before "R2" because IDs are compared as strings.
+- ReadyQueue.pop() chooses the next reader for an idle librarian.
+- A reader returning from a resource block keeps its original arrival key,
+  rather than gaining priority from the later wake-up.
+- The engine is the only coordinator allowed to push/pop it.
+
+
+8.5 SeatPool
+
+- SeatPool represents six physical reading-seat slots.
+- Each slot contains a reader ID or is empty/None.
+- It does not decide FIFO admission order. That is AdmissionQueue's role.
+- It also does not choose which READY reader gets a librarian.
+- allocate(reader_id, k) finds k contiguous seats using the selected allocator.
+- FIRST_FIT chooses the first run large enough.
+- BEST_FIT chooses the smallest fitting run, with lowest start as tie-break.
+- WORST_FIT chooses the largest fitting run, with lowest start as tie-break.
+- release(reader_id) frees exactly that reader's slots and coalesces adjacent
+  free runs.
+- occupied is the current number of occupied seats.
+- largest_free_run is the longest contiguous empty segment.
+- external fragmentation is total free seats minus largest_free_run.
+- capacity may be larger in tests for A1 cross-checking, but graded A2 uses 6.
+- The pool must never allocate overlapping seats or exceed capacity.
+
+
+8.6 AdmissionQueue
+
+- AdmissionQueue is the strict FIFO waiting queue for memory-blocked readers.
+- Reader arrival does not bypass the queue.
+- admission is stopped by the head. If the head request cannot fit, no later
+  smaller reader may bypass it. This is head-of-line blocking.
+- admit_ready() loops until the head fits and is admitted or the queue is
+  empty. It never drops a reader.
+- On successful admission, M is set to virtual time t and the reader changes
+  from BLOCKED_MEMORY to READY.
+- Example: R1 requests 4, R2 requests 3, R3 requests 1. R3 can remain blocked
+  behind R1/R2 even if its own single seat could fit elsewhere.
+- A new BLOCKED_MEMORY reader emits BLOCK_MEMORY tracing in Final mode.
+
+
+8.7 OccupancyTracker
+
+- OccupancyTracker collects seat statistics from SeatPool.
+- It is called once per processed virtual timestamp, after all repeated
+  steps at that timestamp have finished.
+- It must not be called after each arrival/admission microstep.
+- The sampled occupancy holds until the next sample.
+- peak_occupied is the maximum occupied count.
+- occupied_integral is sum(occupied seats * elapsed virtual interval).
+- max_ext_frag is the maximum external-fragmentation value seen.
+- PoolStats contains name, capacity, peak, integral, max fragmentation,
+  start time, end time, and utilization_pct.
+- utilization_pct = occupied_integral / (capacity * (end_time-start_time)).
+  A2 output multiplies this percentage value by 100 through Kabir's format.
+
+
+8.8 Librarians and dispatch
+
+- NUM_LIBRARIANS is 2.
+- Both librarians are identical for scheduling purposes.
+- When both are free simultaneously, fill librarian 0 before librarian 1.
+- Dispatch means READY -> RUNNING. S is set here on the first dispatch.
+- Non-preemptive means a RUNNING reader keeps its librarian and is not
+  interrupted merely because a higher-priority reader arrives.
+- In A2, dispatch reserves a full remaining service burst.
+- In Final mode, a RUNNING reader can voluntarily give up its librarian by
+  entering BLOCKED_RESOURCE for an ACQUIRE.
+- A completion or resource block releases the librarian.
+- Seat release happens only at completion, not on resource blocking.
+
+
+8.9 Virtual time
+
+- Virtual time is the logical integer clock of the simulation.
+- It is not real wall-clock elapsed time and is not measured in seconds.
+- It starts at the earliest arrival time found in the input. If the earliest
+  arrival is 0, virtual time starts at 0. There is no rule forcing it to be 0
+  regardless of input.
+- Examples of virtual-time values:
+  - arrival A;
+  - memory admission M;
+  - start S;
+  - completion C;
+  - resource work offset;
+  - time blocked for a resource.
+- Idle gaps are skipped. The engine jumps to the next arrival/completion/
+  resource action rather than incrementing one unit at a time.
+- At a timestamp, all changes are drained before the clock advances.
+- The clock ends when every reader is TERMINATED, or when no future event
+  exists and unfinished readers cannot progress.
+- Normal end C is a reader completion timestamp, not a fixed configured limit.
+- In incomplete-resource runs, the engine uses find_cycles() and stops.
+- Virtual time controls the graded timestamps and output numbers.
+
+
+8.10 Wall-clock time
+
+- Wall-clock/performance time is real elapsed Python/process time.
+- The engine imports perf_counter and measures run() duration around the
+  simulation.
+- It is stored in SimulationResult.wall_time_s.
+- --stats may print it to stderr; it must never enter graded output.
+- Wall time is useful for measuring worker synchronization overhead and
+  comparing policies over repeated runs.
+- Wall time is not used to decide virtual arrivals or completions.
+- A virtual C of 100 might be simulated in 0.01 real seconds.
+- A virtual C of 10 might take 2 real seconds if worker thread coordination
+  is slow.
+- Final threads provide concurrency; no sleep is used for virtual blocking.
+
+
+8.11 Discrete-event loop
+
+The engine processes all events at t in frozen order:
+
+1. due resource actions;
+2. completions by ascending ID;
+3. arrivals by ascending ID;
+4. FIFO memory admission;
+5. resource-woken readers become READY;
+6. idle librarians are filled;
+7. actions due immediately after dispatch.
+
+Steps are repeated until no change remains at t. Then occupancy is sampled.
+The clock advances to the minimum next arrival/completion/action time.
+
+This order is important. A completion and arrival at equal t must process in
+completion-first order; the released seat can then admit the arrival.
+No future event at t is allowed to leak into t+1 processing early.
+
+
+8.12 Lifecycle timestamps and metrics
+
+- mem_admit: set when the AdmissionQueue actually allocates seats.
+- start: set only the first time READY -> RUNNING occurs.
+- completion: set only RUNNING -> TERMINATED.
+- mem_wait: M-A.
+- response: S-A.
+- turnaround: C-A.
+- waiting: C-A-B.
+- ready_wait: waiting-mem_wait-resource_wait.
+- throughput: N/E, where E=max C-min A.
+- service utilization: sum(B)/(2E)*100 for two librarians.
+- average memory wait: mean(M-A).
+- blocked_for_memory_count: readers with M>A.
+- Metrics asserts A<=M<=S<=C and WAITING=MEM_WAIT+READY_WAIT+RESOURCE_WAIT.
+
+
+8.13 ResourceManager and worker concepts
+
+- ResourceSpec: resource ID and capacity 1 in this Library.
+- STANDARD_RESOURCES: 17 named resources.
+- Action: reader ID, work offset, ACQUIRE/RELEASE, resource ID, units, and
+  stable row index.
+- work_offset: units of service completed when the action is due.
+- ActionBatch: all actions for one reader at one current offset.
+- WorkerPool: submits batches to real threads and joins futures.
+- BatchResult: done count, blocked flag, woken readers, and thread name.
+- done: successful actions in that batch.
+- blocked: the batch stopped at an ACQUIRE that returned BLOCKED.
+- woken: readers that now own everything granted by releases/rollbacks.
+
+Worker threads touch shared resource state only through Samar's locked
+ResourceManager and Tracer. They do not directly mutate Reader, ReadyQueue,
+SeatPool, or AdmissionQueue. The GIL does not make multi-step resource logic
+atomic, so locks remain necessary.
+
+
+8.14 ACTION pointer rules
+
+- executed: service units completed so far.
+- next_action: index of the next action not yet completed.
+- dispatched_at: current dispatch virtual time.
+- executed_at_dispatch: executed at that dispatch.
+- next action time: dispatched_at+(work_offset-executed_at_dispatch).
+- After a batch, next_action += done.
+- If an ACQUIRE blocks, that ACQUIRE stays at next_action and is not done.
+- It is never re-run after wake-up; re-running it would be a double acquire.
+- On wake, next_action += 1 because the reader already owns that resource.
+- A rollback may give a reader resources back. The work offset does not rewind.
+
+
+8.15 Blocked and woken processing
+
+For one worker round:
+
+1. Apply all done and blocked results.
+2. For every blocked reader:
+   - state -> BLOCKED_RESOURCE;
+   - set blocked_since=t;
+   - free its librarian;
+   - keep its seat.
+3. Only after blocked results are applied, process the union of woken lists.
+4. A woken reader must be BLOCKED_RESOURCE.
+5. It becomes READY and receives resource_wait += t-blocked_since.
+6. Queue it in ReadyQueue.
+
+If a reader blocks and is woken in the same worker round, it ends READY with
+no resource wait added for that round.
+
+
+8.16 Concurrency and synchronization
+
+- Concurrency: multiple tasks can make progress over overlapping time.
+- Parallelism: simultaneous execution on hardware. Python GIL can limit CPU
+  parallelism even though threads remain concurrent.
+- Lock: mutual exclusion protecting a critical section.
+- Critical section: check and update of shared state must occur together.
+- Race: multiple threads read/update ownership in a conflicting interleaving.
+- Exclusivity: capacity-one resources must never have multiple holders.
+- Trace audit: independently replay ownership events to verify resource
+  exclusivity and illegal release behavior.
+- Engine exclusivity result: max(ResourceManager count, trace audit count).
+- no busy waiting: workers do not loop checking for free resources.
+- no polling sleep: virtual blocking replaces sleeping for correctness.
+
+
+8.17 Deadlock concepts
+
+- Wait-for graph: maps a blocked reader to readers holding required resources.
+- Cycle: a reader waits on a chain that returns to itself.
+- NONE: unsafe demonstration policy. A blocked reader can hold resources.
+- ROLLBACK:
+  if an acquire is busy and the reader holds resources, it gives up holdings
+  and waits for the needed set atomically.
+- ORDERED:
+  resources have a global rank. The invariant prevents a reader from waiting
+  on a lower-ranked resource than its holdings.
+- find_cycles(wait_for_graph): returns deterministic wait-for cycles.
+- Unresolved deadlocks: count of cycles found after no future event remains.
+- No-hang guarantee: stop and report rather than spin forever.
+- A2 zip never needs NONE/ROLLBACK/ORDERED classes.
+
+
+8.18 CLI and exit codes
+
+- a2_main:
+  INPUT_FILE FCFS|PRIORITY FIRST_FIT|BEST_FIT|WORST_FIT OUTPUT_FILE.
+- final_main:
+  INPUT_FILE SCHEDULER ALLOCATOR OUTPUT_FILE [--trace FILE|-]
+  [--policy ROLLBACK|ORDERED] [--stats] [--quiet].
+- --demo-deadlock:
+  delegates to Samar's real engine/policy implementation.
+- Status 0: success.
+- Status 1: usage or input error; stderr starts with "Error:".
+- Status 2: Final run ended incomplete/deadlocked.
+- A failed run must not write an output file.
+- Enum values are case-sensitive.
+
+
+8.19 Trace and policy statistics
+
+- TraceEvent: sequence number, virtual t, event kind, reader, resource,
+  thread name, and detail.
+- Engine emits ARRIVE, BLOCK_MEMORY, ADMIT, DISPATCH, UNBLOCK, COMPLETE,
+  and DEADLOCK.
+- ResourceManager emits ACQUIRE, BLOCK, RELEASE, HANDOFF, and ROLLBACK.
+- Traces are human-readable and written outside graded output.
+- PolicyStats contains policy, rollbacks, resources rolled back,
+  reacquisitions, out-of-order requests, and held-while-waiting count.
+- wall_time_s is also diagnostic, not graded output.
+
+
+8.20 Output contract
+
+- Input/output text is UTF-8.
+- Output lines use LF/newline, no header, no prose, and no blank rows.
+- A2: PROCESS lines sorted by ID, eight SUMMARY lines, then POOL.
+- Final: A2 PROCESS lines plus RESOURCE_WAIT, SUMMARY, POOL, RESOURCE lines
+  sorted by ID, and three CHECK lines.
+- Every decimal in A2/Final uses exactly four decimal places.
+- A1 uses the original six-place C++ format.
+- write_output() writes the file with newline="\n".
+
+
+8.21 Packaging and lazy imports
+
+- build_packages.py creates dist/a2.zip and dist/final.zip.
+- The A2 archive excludes:
+  resource_parser.py, trace.py, resources.py, workers.py, deadlock.py.
+- A2 cli.py must not import these modules.
+- Lazy import means Final modules are imported only inside Final execution.
+- Final imports parser.resource_parser only when parse_text(..., "FINAL").
+- A package must run from a clean extracted folder with plain python3.
+- A build smoke test proves import and execution in the intended directory.
+
+
+8.22 Fakes, contracts, and tests
+
+- Fake: a shared stand-in implementing the interface and behavior needed by
+  consumers while the real owner module is unfinished.
+- fake_engine: enables Aarush and Samar to develop against SimulationResult
+  without waiting for the real engine.
+- Contract test: verifies behavior/signatures that ordinary unit cases cannot.
+- Pyi conformance: verifies dataclass fields, function parameters, constants,
+  enums, and properties match the `.pyi`.
+- Integration test: verifies several real modules working together.
+- The A1 cross-check activates after engine.py and memory.py exist.
+- It compares S and C for A1 inputs and random inputs.
+- The full suite command is:
+  python3 -m unittest discover -s tests -t . -v
+- Run test names from the repository root, not the tests directory.
+
+
+8.23 Common viva distinctions
+
+- ReadyQueue: READY/seat-admitted readers waiting for librarians.
+- AdmissionQueue: memory-blocked arrived readers waiting for seats.
+- SeatPool: the physical seat allocation state.
+- ReadyQueue is scheduling; AdmissionQueue is memory admission.
+- Virtual time: simulation timestamps and metrics.
+- Wall-clock time: real process synchronization/experiment overhead.
+- Reader state: lifecycle phase.
+- Queue/pool: location or ownership structure; neither replaces state.
+- Deadlock: circular wait after no resource progress remains.
+- Rollback: breaks hold-and-wait; holds can be released.
+- Ordered: breaks circular-wait using ranked resources.
+- Coordinator: one thread owns virtual clock, Reader, ReadyQueue, SeatPool,
+  and AdmissionQueue.
+- Workers: operate resource ownership through locked managers only.
