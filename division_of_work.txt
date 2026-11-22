@@ -42,7 +42,10 @@ and errors.py on day 1, even before the logic is finished.)
 
 STATUS (Kabir): K1-K11 and K10b are DONE in src/library_sim/ + tests/. K10
 (tests/integration/test_engine_vs_a1.py) is active and passes against the
-real engine + memory. A G5 draft is in docs/readme/. See DEVELOPMENT.md.
+real engine + memory. My modules are clean under mypy --strict. G5 entries
+are collected in docs/readme/assumptions_limitations_optional.md; still open
+for me: restore the TA-approved wording and fold it into the READMEs, and do
+the G2 review with Urvashi. See DEVELOPMENT.md.
 
 K1. errors.py: InputError(message, line_no), UsageError.
 K2. models.py: constants (NUM_LIBRARIANS, SEAT_CAPACITY, STANDARD_RESOURCES),

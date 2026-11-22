@@ -114,9 +114,9 @@ def parse_text(text: str, mode: Mode) -> SimulationInput:
         )
 
     # FINAL mode: the R and K sections belong to Samar's resource_parser.
-    from . import resource_parser  # [CONTRACT 6] lazy import
+    from .resource_parser import parse_resource_sections  # [CONTRACT 6] lazy import
 
-    resources, actions = resource_parser.parse_resource_sections(
+    resources, actions = parse_resource_sections(
         lines, next_index, tuple(readers)
     )
     return SimulationInput(

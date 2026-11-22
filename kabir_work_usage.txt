@@ -14,7 +14,7 @@ DEVELOPMENT.md has the repo layout.
 --------------------
   src/library_sim/     errors, models, scheduler, parser, metrics, output, a1
   tests/contract/      one contract test file per module
-  tests/integration/   cross-module tests (they skip until the modules they need exist)
+  tests/integration/   cross-module tests (all modules now exist, so they all run)
   tests/fakes/         put your shared fakes here (see tests/fakes/README.md)
   docs/readme/         README sections (mine are there, add yours)
 
@@ -167,15 +167,27 @@ Samar (resource parser, resources, deadlock)
     a stand-in for your module, so the calling side is fixed.
 
 
-5. NOT DONE YET / WHAT I NEED FROM YOU
---------------------------------------
-- G5 (README Assumptions / Limitations / Optional features):
-  docs/readme/assumptions_limitations_optional.md has a draft with a TODO
-  for each of you. Add your module's assumptions and limitations there as
-  you go.
-- mypy --strict now only reports modules that don't exist yet (Samar's
-  resource_parser, trace, resources, workers, deadlock). They go away as
-  those modules land.
+5. STATUS AND WHAT'S STILL OPEN
+-------------------------------
+Status: 173 root tests pass on Python 3.10 and 3.14 (one expected skip: the
+"missing Final module" check, since resource_parser.py now exists).
+Standalone A1: 17 tests pass and the golden runner passes 20/20. Both
+zips build and pass their own extracted checks.
+
+- mypy --strict: my modules are clean (errors, models, scheduler, parser,
+  metrics, output, a1). 24 typing-only errors remain in other modules,
+  none affecting behaviour:
+    experiments.py  17  (Aarush: RunSummary | PolicyComparisonRow unions,
+                         argparse error() override)
+    resources.py     3  (Samar: variable `w` reused with two types)
+    cli.py           3  (Urvashi: run_unsafe_demo(**dict[str, str]))
+    deadlock.py      1  (Samar: _DemoPoolStats passed as PoolStats)
+  Run: uv run --python 3.10 --no-project --with mypy mypy --strict src/library_sim
+- G5 (README Assumptions / Limitations / Optional features): all entries
+  are now in docs/readme/assumptions_limitations_optional.md. Still to do
+  (me): restore the TA-approved wording from context.md (the current text
+  hedges because context.md is gitignored), then fold the section into
+  the A2 and Final READMEs.
 - Found a bug in my modules, or need a signature changed? Tell me first.
   We change library_sim.pyi, then the code, never the other way round.
 
