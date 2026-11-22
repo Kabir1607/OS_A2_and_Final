@@ -1,102 +1,211 @@
-# Concurrency, Synchronization, and Deadlock Prevention (Final Core)
+# Concurrency, synchronization, and deadlock prevention
 
-**Author:** Samar (Tasks S1–S9)  
-**Modules:** `resource_parser.py`, `trace.py`, `resources.py`, `workers.py`, `deadlock.py`
+**Implementation owner:** Samar (`sam-b02`).
 
----
+**Audited code:** `f69cd13`, 22 November 2026, Python 3.12.3.
 
-## 1. Coffman Conditions in the Smart Library
+**Evidence:** [implementation audit](../implementation_audit.md).
 
-Deadlock can occur only if all four Coffman conditions hold simultaneously:
+The five Final modules are implemented. Integrated samples pass, but worker
+overlap evidence, some contract details, measured comparisons, and complete
+submission packaging remain unfinished. S1–S9 are assigned work items; this
+document does not mark every subtask complete.
 
-1. **Mutual Exclusion:** Each library resource (e.g., `REFERENCE_BOOK`, `JOURNAL`, `OS_BOOK_1`..`OS_BOOK_10`) has physical capacity 1. Only one reader can hold a given book at any moment.
-2. **Hold and Wait:** A reader currently holding one book (e.g., `REFERENCE_BOOK`) can request and wait for another book (e.g., `JOURNAL`) without relinquishing its existing holdings.
-3. **No Preemption:** Resources cannot be forcibly seized from a reader. In standard execution, a book is retained until the reader issues an explicit `RELEASE`.
-4. **Circular Wait:** Two or more readers form a closed chain where each reader waits for a resource held by the next (e.g., R1 holds `REFERENCE_BOOK` and waits for `JOURNAL`; R2 holds `JOURNAL` and waits for `REFERENCE_BOOK`).
+## Library resources and deadlock conditions
 
----
+Readers obtain seats through A2 admission before a librarian serves them.
+During service they can acquire declared named books or journals, each with
+capacity one. Different copies, such as OS_BOOK_3 and OS_BOOK_7, have separate
+ownership records and can be held simultaneously.
 
-## 2. Threading Model and Free-Threaded Concurrency
+The unsafe NONE policy illustrates four necessary deadlock conditions:
 
-- **Real Concurrency:** The simulation uses actual operating-system threads via `WorkerPool` (wrapping Python's `ThreadPoolExecutor`). Action batches for distinct readers execute concurrently across distinct worker threads.
-- **The GIL Note:** CPython threads run under the Global Interpreter Lock (GIL), which prevents multiple native CPU cores from executing Python bytecode in parallel. However, thread preemption can occur between any two bytecodes or system calls. Thus, data races and lost wake-ups are real hazards if shared mutable state is unprotected.
-- **Independence from GIL:** Atomicity is never assumed from the GIL. Every check-and-update on resource state, holder tracking, queue manipulation, and counter increments is strictly guarded inside `ResourceManager._lock`. This ensures complete safety and correctness on free-threaded Python (PEP 703) and alternative runtimes (PyPy).
-- **Single-Coordinator Architecture:** Reader process lifecycle transitions (`Reader.transition`), virtual time progression, `ReadyQueue`, and memory pools (`SeatPool`, `AdmissionQueue`) are owned exclusively by the coordinator thread. Worker threads only touch `ResourceManager` and `Tracer`. This completely eliminates data races on reader lifecycle structures without fine-grained distributed locking.
+1. **Mutual exclusion:** a named physical resource has one holder.
+2. **Hold and wait:** a reader keeps one book while waiting for another.
+3. **No resource preemption:** under NONE, an input RELEASE returns a held
+   book. Safe policies can instead force release of some holdings.
+4. **Circular wait:** R1 holds REFERENCE_BOOK and waits for JOURNAL while
+   R2 holds JOURNAL and waits for REFERENCE_BOOK.
 
----
+CPU scheduling remains non-preemptive FCFS or Priority. Forcing a book
+release is distinct from interrupting a reader's service.
 
-## 3. Synchronization Primitives and Design
+## What each module currently does
 
-| Primitive | Location | Purpose |
+| Module | Implemented behavior | Important limit |
 |---|---|---|
-| `threading.Lock` | `ResourceManager` | Guards all resource ownership, waiter queues, exclusivity checking, and statistics. Checked and updated in a single atomic critical section. |
-| `threading.Lock` | `Tracer` | Ensures global sequential ordering (`seq`) and thread-safe appending and formatting of trace events. |
-| `ThreadPoolExecutor` | `WorkerPool` | Manages real OS worker threads named `worker-1`, `worker-2`, etc. Submits batches, joins futures, and re-raises worker exceptions. |
-| `threading.Barrier` | `run_blocking_demo`, stress tests | Synchronizes thread start phases to guarantee concurrent overlap when demonstrating race conditions and deadlocks. |
-| `threading.Condition` | `run_blocking_demo` | Implements timed thread waiting (`wait(timeout=...)`) in the bounded blocking demonstration. |
+| `resource_parser.py` | Parses R/K sections; checks named capacity-one resources, units, offsets, references, balanced ownership replay. | Sorts actions first, accepting descending offsets; semantic errors can point to the R-count line. |
+| `resources.py` | Locks ownership, waiters, grants/releases, counters, and resource-event emission; implements all three policies. | Fairness and trace shapes depend on policy. |
+| `workers.py` | Uses real executor threads; stops at a blocked acquire; propagates exceptions; returns results in input order. | Short batches can all use one worker; overlap is not guaranteed. |
+| `trace.py` | Locks enabled event recording and sink writes; records sequence, virtual time, IDs, thread name; replays ownership. | Disabled tracers retain no history to audit. |
+| `deadlock.py` | Defines ranks/policies/counters; finds cycles; runs the real-engine unsafe demo when memory exists; offers a separate blocking demo. | A supplied tracer is reused across policies; the optional demo uses synthetic simulation statistics. |
 
----
+## Coordinator, workers, and synchronization
 
-## 4. Resource Allocation, Blocking, and Direct Handoff
+One coordinator owns virtual time, Reader transitions, the ready queue,
+seat pool, and admission queue. Workers receive action batches, not mutable
+Reader objects. Actions run sequentially within a batch until its first
+blocked ACQUIRE.
 
-### Virtual-Time Non-Blocking Workers
-In a discrete-event simulation, worker threads must not park on real-time sleep waiting for virtual simulation time. When `manager.acquire()` finds a resource busy, it immediately records the reader as a waiter and returns `AcquireOutcome(status=BLOCKED)`. The coordinator thread then:
-1. Marks the reader as `BLOCKED_RESOURCE` with `blocked_since = now`.
-2. Frees the librarian execution unit (allowing other READY readers to be served).
-3. Preserves the reader's contiguous memory seats in the `SeatPool`.
+`ThreadPoolExecutor` provides real threads named `worker-N`. Resource methods
+use one `threading.Lock`: ownership checks and updates share the critical
+section. Tracer has a separate lock for its event list and sink writes.
+WorkerPool measures intervals and can write an `[overlap]` line to the sink
+when distinct workers overlap. This diagnostic is outside the graded output.
 
-### Direct Handoff (Zero Lost Wake-ups)
-When a resource is released (or rolled back), it is handed **directly** to the head of the FIFO waiter queue inside the critical section before releasing `ResourceManager._lock`:
-- The resource is never left unowned in the open pool where an incoming reader could steal it.
-- No lost wake-ups can occur because the waiter is marked as holding the resource immediately and returned in the `woken` list.
-- When the coordinator re-dispatches a woken reader, the reader **already owns** the book; its action pointer advances (`next_action += 1`) without re-running the `ACQUIRE`, avoiding duplicate acquire errors [CONTRACT 1].
+An unavailable acquire records a waiter and returns BLOCKED. The coordinator
+reschedules readers through this event mechanism rather than parking workers
+until virtual time advances. The normal loop uses neither sleep nor resource
+polling for correctness. Resource ownership locking does not assume the GIL
+makes multi-step operations atomic. Free-threaded Python and PyPy were not
+validated, so their correctness is not claimed as a tested result.
 
----
+**Normal-worker overlap evidence is still pending.** In 100 audit trials,
+two short batches used the same worker and recorded no overlap. The existing
+overlap test checks only name prefixes. A barrier exists in the separate
+blocking demo and a stress test, not in normal WorkerPool submission.
 
-## 5. Deadlock Prevention Policies
+## Blocking, wake-up, and fairness
 
-Both policies accept **any valid input order** and never reject an input or leave unfinished readers (`COMPLETED_COUNT == N`).
+The coordinator first applies every batch's done/blocked results. A blocked
+reader becomes BLOCKED_RESOURCE, records its blocking time, releases its
+librarian, and keeps its seats. The coordinator then handles the union of
+woken IDs: each already owns what it needs to resume, becomes READY, and
+accumulates only the virtual blocked interval in `resource_wait`. The blocked
+ACQUIRE advances once and is not executed again.
 
-### 1. ROLLBACK (Breaks Hold and Wait)
-- **Rule:** If a reader requests a resource $X$ that is free, it is granted immediately. If $X$ is busy:
-  - If the reader holds no other resources, it waits for $\{X\}$.
-  - If the reader holds a set of resources $H$, it immediately releases **all** of $H$ (emitting `ROLLBACK` events and handing them off to waiting readers) and enters the queue waiting for the combined set $H \cup \{X\}$.
-- **Atomic Grant:** A multi-resource request is granted atomically only when **every** requested resource is simultaneously free.
-- **Invariant:** A reader never waits while holding any resource (`held_while_waiting == 0` strictly).
+In the current Final loop, wake processing occurs inside the action round,
+before completions and arrivals. This precedes the contract's numbered step 5.
+Librarian dispatch still follows admission.
 
-### 2. ORDERED (Breaks Circular Wait)
-- **Rule:** Resources have a global total ordering given by lexicographical ID rank (`resource_rank`).
-- **Free Grant Flexibility:** A free resource is granted in any order. Free acquisitions create no wait-for edges and cannot induce deadlocks.
-- **Ordered Wait Invariant:** A reader may only **wait** for a resource ranked higher than all resources it currently holds.
-- **Handling Out-of-Order Requests:**
-  - If $X$ is busy and all held resources have $\text{rank} < \text{rank}(X)$, the reader waits in-order while retaining its holdings.
-  - If $X$ is busy and some held resources have $\text{rank} > \text{rank}(X)$, the reader releases only those held resources ranked higher than $X$ (`ROLLBACK` events). It then waits to re-acquire $X$ and the rolled-back items in strictly ascending rank order.
-- The reader is woken only once it has reacquired all required resources.
+Ownership grants and waiter selection occur under the resource lock. The
+actual fairness rules are:
 
----
+- **NONE:** release grants the book directly to its first queued waiter.
+- **ROLLBACK:** a global queue is scanned for the first waiter whose entire
+  set is free. Earlier ineligible requests can be bypassed. A rolled-back book
+  can remain free while its former holder waits for the rest of its set;
+  other readers can acquire it.
+- **ORDERED:** each current resource wait has a FIFO queue. A reader may
+  advance through several queues while reacquiring its ordered sequence and
+  wakes only after obtaining the complete sequence. This is not global
+  arrival-order fairness or a starvation-freedom guarantee.
 
-## 6. Policy Comparison and Default Selection
+No strict fairness property of the OS lock is assumed.
 
-| Feature / Workload | ROLLBACK (Breaks Hold-and-Wait) | ORDERED (Breaks Circular Wait) | Winner / Analysis |
-|---|---|---|---|
-| **P1: In-order Low Contention** | Few rollbacks; low overhead | 0 rollbacks; direct grant | **ORDERED** (zero churn) |
-| **P2: In-order High Contention** | Releases early, unblocking others | Readers hold while waiting (convoy) | **ROLLBACK** (lower overall wait) |
-| **P3: Circular / Reversed** | Releases all holdings, retries set | Releases only higher-ranked items | **ORDERED** (fewer rollbacks) |
-| **P4: Uncontended Out-of-Order** | 0 rollbacks, grants immediately | 0 rollbacks, grants immediately | **TIE** (zero overhead) |
-| **P5: Multi-book vs Stream** | All-or-nothing wait risks starvation | Step-by-step progress | **ORDERED** (better fairness) |
-| **P6: Randomized Stress** | High churn on multi-book sets | Predictable ascending acquisition | **ORDERED** (lower synchronization overhead) |
+## Implemented prevention policies
 
-### Default Policy Choice: `ROLLBACK`
-`DEFAULT_POLICY = PreventionPolicy.ROLLBACK` is committed as the default configuration because:
-1. It guarantees `held_while_waiting == 0` under all conditions, completely eliminating hold-and-wait across all workloads.
-2. In library workflows where readers hold books during extended study periods, holding resources while blocked creates severe convoys under FIFO admission. Releasing held books immediately frees them for other readers.
-3. Both policies remain fully selectable at runtime via `--policy ROLLBACK|ORDERED`.
+### ROLLBACK — remove hold-and-wait
 
----
+A free requested resource is granted immediately. If it is busy and the
+requester holds nothing, the reader waits for that resource. If it holds a
+set H, the manager releases all of H, records a rollback, and queues the
+reader for H plus the requested resource. The full set is granted atomically
+once all members are free. A queued ROLLBACK reader holds no books;
+`held_while_waiting` remains zero in the tested runs.
 
-## 7. Assumptions, Edge Cases, and Limitations
+Work offsets do not rewind. Other readers can benefit from released books,
+but reacquisition overhead, additional waiting, or starvation are possible
+trade-offs. Removing hold-and-wait does not eliminate every convoy.
 
-1. **No Offset Rewind:** After a rollback, a reader's service offset does not rewind. The reader resumes execution from its current offset once re-granted its holdings.
-2. **FIFO Fairness per Resource:** Waiters for any resource are resumed strictly in FIFO order. No OS lock fairness is assumed.
-3. **Double Acquire / Double Release Protection:** `ResourceManager` raises `RuntimeError` if a holder or waiter attempts to re-acquire an already held/waiting resource [CONTRACT 1], or if an unheld resource is released.
-4. **Exclusivity Audit:** `trace.audit_exclusivity` replays every trace event independently. `CHECK,EXCLUSIVITY_VIOLATIONS` reports $\max(\text{manager\_count}, \text{trace\_audit})$, guaranteeing that neither component can conceal an exclusivity failure [CONTRACT 4].
+### ORDERED — ascending waits to prevent circular wait
+
+Rank is lexicographic order of declared IDs: OS_BOOK_10 precedes OS_BOOK_2.
+A free resource can be granted out of order. For a busy resource, the reader
+keeps lower-ranked holdings and releases holdings ranked above the request.
+It then obtains the request and released books in ascending rank, waiting
+at each necessary step. The reader resumes only after the complete sequence.
+
+This policy is intended to maintain ascending wait edges. It may hold books
+while blocked, causing convoying. Both safe policies accept all acquisition
+orders in the tested bundled samples; this is not proof of progress or
+fairness for every possible input.
+
+### Default and comparison status
+
+`DEFAULT_POLICY` is ROLLBACK. It is the current engineering default; a measured
+P1–P6 selection is not complete and `experiments.py` is absent. The earlier
+winner table has been removed because it presented expectations as results.
+
+A focused P1 audit used FIRST_FIT, both schedulers, and 30 runs per policy:
+
+| Scheduler | Policy | Runs | Rollbacks each run | Total resource wait each run | Last completion each run |
+|---|---|---|---|---|---|
+| FCFS | ROLLBACK | 30 | 0 | 5 | 11 |
+| FCFS | ORDERED | 30 | 0 | 5 | 11 |
+| PRIORITY | ROLLBACK | 30 | 0 | 5 | 11 |
+| PRIORITY | ORDERED | 30 | 0 | 5 | 11 |
+
+Those P1 metrics tie; no wall-time or fairness winner is established. P2–P6
+are fixed candidate examples, not measured winners. P5 has three single-book
+readers rather than an unbounded stream; P6 is not a random generator and
+its last two readers have no resource actions.
+
+## Trace and statistics details
+
+Resource events are emitted inside the resource lock. The coordinator emits
+ARRIVE, BLOCK_MEMORY, ADMIT, DISPATCH, UNBLOCK, COMPLETE, and DEADLOCK. Enabled
+tracing is separate from graded output. The engine reports the maximum of
+the manager's violation count and trace ownership replay.
+
+Replay checks ACQUIRE/HANDOFF/RELEASE/ROLLBACK ownership, including duplicate
+grants and releases by non-holders. It does not validate overlap, provenance,
+FIFO behavior, or complete compliance. When tracing is disabled, the empty
+history provides no independent ownership evidence.
+
+Multi-resource ROLLBACK grants can emit HANDOFF after the book was freed
+and label every grant with the latest releasing reader rather than the book's
+actual previous holder. ORDERED also emits all rollback events before their
+handoff processing. These differ from CONTRACT 3's immediate per-book event shape.
+
+`acquisitions` includes regrants. Resource `wait_events` counts original
+acquires returning BLOCKED, not each internal ORDERED reacquisition wait.
+`out_of_order_requests` currently increments only under ORDERED: zero under
+ROLLBACK does not prove ascending input order. These counters are not blocked
+durations or wall time.
+
+## Running the current code
+
+From the repository root, with Python 3.10+ and no third-party packages:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -t . -v
+PYTHONPATH=src python3 -c 'import sys; from library_sim.cli import final_main; raise SystemExit(final_main(sys.argv[1:]))' inputs/spec_sample.txt FCFS FIRST_FIT /tmp/library-final-output.txt --policy ROLLBACK --trace /tmp/library-final-trace.txt --stats
+PYTHONPATH=src python3 -c 'import sys; from library_sim.cli import final_main; raise SystemExit(final_main(sys.argv[1:]))' --demo-deadlock
+```
+
+The normal CLI advertises ROLLBACK/ORDERED but currently also accepts NONE;
+use NONE only for the unsafe demonstration. Incomplete Final runs write a
+partial report and return 2. Parser/usage errors return 1 before result writing;
+writing errors can leave partial files. Worker RuntimeErrors propagate and
+are not among the CLI's caught exceptions.
+
+`run_unsafe_demo()` uses separate tracers by default. Supplying a single Tracer
+across policies contaminates later audits with unsafe holdings; this reproduced
+two false violations in each safe report. The default sample path is relative
+to the working directory, so run from the repository root. Generated ZIPs do
+not contain the input: the packaged default demo fails without an external copy.
+
+The optional `run_blocking_demo()` is callable from Python. It uses two actual
+threads, a barrier, the same ResourceManager under NONE, and timed condition
+waits. It has placeholder pool/timestamp statistics and records the configured
+timeout as `wall_time_s`, not measured runtime. It is not a service/policy
+benchmark. Its barrier and thread joins have no timeout protection.
+
+## Evidence and remaining work
+
+Root discovery at the audited revision found 134 tests: 133 passed and one
+missing-module check was skipped because that module exists. Another 360
+integrated sample runs completed with zero reported violations/deadlocks.
+Some stress tests do not assert completion or end-of-run conservation; the
+different-copy test uses sequential calls. They do not prove every concurrency
+claim or complete S7.
+
+Resource/worker fakes exist. The resource fake uses NONE-style ownership
+regardless of supplied policy, and the worker fake runs synchronously. Use
+real modules for prevention-policy and concurrency validation.
+
+Pending: controlled overlap evidence; the parser, trace, CLI, and shared-tracer
+corrections above; stronger regressions; measured policy/default comparisons;
+complete READMEs/archive contents; and presentation material. Detailed evidence
+and remaining Aarush tasks are in the linked audit.

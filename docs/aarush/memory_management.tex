@@ -28,6 +28,12 @@ operations. A1--A5 here are Aarush's task identifiers in
 \texttt{division\_of\_work.txt}; they are not assignment numbers.
 The module follows the existing \texttt{library\_sim.pyi} interface contract.
 
+\textbf{Audit snapshot:} checked against code revision \texttt{f69cd13} on
+22 November 2026, using Python 3.12.3. The supporting repository report is
+\href{../implementation_audit.md}{\texttt{docs/implementation\_audit.md}}.
+This is the function guide for the implemented memory module, not the complete
+A2 submission README or a claim that the Final project is finished.
+
 \tableofcontents
 \newpage
 
@@ -475,12 +481,20 @@ $[0,4)$, four during $[4,5)$, and three during $[5,6)$.
 Thus seat-time is $4\times4+4\times1+3\times1=23$, peak occupancy is four,
 fragmentation is zero, and utilization is $23/36\times100\%$.
 
-The existing engine-versus-A1 cross-check uses the Python A1 inputs and golden
-files. It checks 11 bundled workloads plus 200 seeded random workloads under
+Separate A1 regression tests use the Python golden-output files. The
+engine-versus-A1 cross-check itself compares timestamps and summary metrics
+against the Python A1 implementation on 11 bundled workloads plus 200 seeded
+random workloads under
 both schedulers. A room large enough for the sum of all readers' requests
 cannot delay admission, so this is a sufficient unlimited-memory baseline
 without allocating a million test seats. Golden output contents and scheduling
 assertions are unchanged.
+
+At this revision, all 25 memory checks pass. Root discovery finds 134 tests:
+133 pass and one missing-module check is skipped because the Final module
+is present. The standalone Python A1 suite passes 17 tests and its golden-output
+runner passes 20 cases. These are Python 3.12.3 results, not guarantees for
+every input or interpreter.
 
 \subsection{Running the checks}
 Run these commands from the repository root:
@@ -502,16 +516,35 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 
 Explicit loops and basic Python containers make the algorithms easy to trace
 in the viva. The implementation favors clarity over search-speed optimization.
-It introduces no new public API and makes no changes to the interface contract.
+It implements the existing planned public API without changing its signatures
+or the interface contract.
 
 Strict FIFO admission improves arrival-order fairness but can leave usable
 seats idle behind a blocked head. Fragmentation can prevent a large request
 even when enough seats are free in total. Neither allocation compaction nor
 bypassing the head is part of this implementation.
 
-This delivery covers Aarush A1--A5 and their documentation. Comparison
-experiments, the separate A7c fake, Final resource synchronization, and
-submission packaging remain later tasks. The deprecated C++ implementation
-is not required to run the tests.
+\subsection{Current task status}
+This delivery covers Aarush A1--A5. A6 still needs separate A2 inputs and
+hand-verified expected outputs. A7/A7b still need the experiment harness and
+measured comparisons. Memory contract tests exist, but the separate A7c fake
+does not. A8's runtime memory map/timeline is not implemented; the diagrams
+here are explanatory examples. A9/A10 still need the complete A2 README,
+comparison results, and submission instructions.
+
+\subsection{Integration and packaging now present}
+The shared engine and CLI work with real memory. Samar's resource, worker,
+trace, and deadlock modules now exist and pass the bundled integrated cases.
+Controlled normal-worker overlap, several trace/parser details, and complete
+policy comparisons remain unfinished; consult the audit for limitations.
+
+The ZIP builder produces executable A2 and Final archives. A2 excludes
+Final-only modules and runs independently. Both archives currently contain
+a generated entrypoint, Python package, and one-line placeholder README.
+They omit full documentation, samples, and tests. The packaged default
+deadlock demo lacks its input. Packaging exists, while complete submission
+assembly remains pending.
+
+The deprecated C++ implementation is not required to run the code or tests.
 
 \end{document}
