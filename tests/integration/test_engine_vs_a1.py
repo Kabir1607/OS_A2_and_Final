@@ -18,14 +18,14 @@ from library_sim.models import Allocator, ReaderSpec, Scheduler, SimulationInput
 
 HAVE_ENGINE = all(importlib.util.find_spec(f"library_sim.{m}") is not None
                   for m in ("engine", "memory"))
-CPP_INPUTS = REPO_ROOT / "Assignment_1-OS_Lab_C++" / "tests" / "inputs"
-UNLIMITED = 10**6
+A1_ROOT = REPO_ROOT / "Assignment_1-OS_Lab_Python"
 
 
 def a1_inputs() -> list[tuple[str, list[ReaderSpec]]]:
-    cases = [(p.name, parse_a1_text(p.read_text())) for p in sorted(CPP_INPUTS.glob("*.txt"))]
+    cases = [(p.name, parse_a1_text(p.read_text()))
+             for p in sorted((A1_ROOT / "tests" / "inputs").glob("*.txt"))]
     cases.append(("input.txt", parse_a1_text(
-        (REPO_ROOT / "Assignment_1-OS_Lab_C++" / "input.txt").read_text())))
+        (A1_ROOT / "input.txt").read_text())))
     rng = random.Random(2026)
     for i in range(200):
         n = rng.randint(1, 20)
@@ -45,12 +45,15 @@ class EngineReproducesA1(unittest.TestCase):
 
         for name, readers in a1_inputs():
             inp = SimulationInput(quantum=2, readers=tuple(readers))  # space_req = 1
+            # Enough for EVERY reader at once: memory cannot delay admission.
+            # This preserves the unlimited-pool check without scanning a million seats.
+            unlimited_capacity = sum(r.space_req for r in readers)
             for scheduler in Scheduler:
                 with self.subTest(input=name, scheduler=scheduler.value):
                     expected = {r.id: (r.start, r.completion)
                                 for r in to_reader_results(run_a1(readers, scheduler))}
                     result = simulate(inp, scheduler, Allocator.FIRST_FIT, "A2",
-                                      pool_capacity=UNLIMITED)
+                                      pool_capacity=unlimited_capacity)
                     actual = {r.id: (r.start, r.completion) for r in result.readers}
                     self.assertEqual(actual, expected)
                     self.assertEqual(result.incomplete, ())

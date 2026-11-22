@@ -1,0 +1,517 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[margin=25mm]{geometry}
+\usepackage{amsmath}
+\usepackage{listings}
+\usepackage{hyperref}
+\hypersetup{hidelinks, pdftitle={Aarush A1--A5: Library Seat Management}, pdfauthor={Aarush}}
+\lstset{basicstyle=\ttfamily\small, columns=fullflexible,
+  keepspaces=true, breaklines=true, frame=single, showstringspaces=false}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+\newcommand{\routine}[2]{\subsection{\texorpdfstring{\texttt{#1}}{#2}}}
+\newcommand{\librarymeaning}{\textbf{Library operation.} }
+\newcommand{\arguments}{\textbf{Inputs.} }
+\newcommand{\steps}{\textbf{Steps.} }
+\newcommand{\result}{\textbf{Result and errors.} }
+\newcommand{\example}{\textbf{Example.} }
+
+\title{Smart Library: Seat Management\\Aarush's Tasks A1--A5}
+\author{Function-by-function Python implementation guide}
+\date{}
+
+\begin{document}
+\maketitle
+
+This guide explains \texttt{src/library\_sim/memory.py} through library
+operations. A1--A5 here are Aarush's task identifiers in
+\texttt{division\_of\_work.txt}; they are not assignment numbers.
+The module follows the existing \texttt{library\_sim.pyi} interface contract.
+
+\tableofcontents
+\newpage
+
+\section{The library model and module boundaries}
+
+Each reader represents an operating-system process. Two librarians represent
+two execution units. The six indexed reading seats represent contiguous memory.
+A reader requesting several seats is a modelling abstraction: the request
+reserves that many adjacent slots, rather than modelling literal furniture use.
+
+\begin{center}
+\begin{tabular}{ll}
+\textbf{Library operation} & \textbf{Operating-system concept} \\
+Find an adjacent group of free seats & Contiguous allocation \\
+Reserve seats for a reader & Allocate memory to a process \\
+Wait in the seating line & Block for memory admission \\
+Wait while seated for a librarian & Wait in the scheduler's ready queue \\
+Return seats when finished & Deallocate memory \\
+Measure occupied seats over time & Time-weighted memory utilization
+\end{tabular}
+\end{center}
+
+A seat contains a reader ID, or Python's \texttt{None} if free. Diagrams use
+a dot for \texttt{None}. Indices start at zero:
+\begin{lstlisting}
+Seat index:  0   1   2   3   4   5
+Owner:      R1  R1   .   .  R2   .
+\end{lstlisting}
+
+The engine owns arrival ordering, lifecycle transitions, admission timestamps,
+and librarian scheduling. The memory module only manages reservations,
+the admission line, and seating statistics. A seated reader retains the
+reservation while waiting for a librarian and, in Final mode, while blocked
+for a book. Seats are returned only on completion.
+
+At each timestamp, the A2 engine handles completions and releases, arrivals,
+FIFO admission, and librarian dispatch, in that order. It then samples the
+final seating state once. All times below are integer virtual time units;
+there is no sleeping. Only the coordinator thread accesses this module.
+
+\section{A1: Find and choose seats}
+
+\texttt{FreeRun} means \texttt{tuple[int, int]}: the first seat index and
+the group's length. The tuple \texttt{(2, 3)} means seats 2, 3, and 4,
+not seats 2 through 3. Groups are maximal: adjacent free seats belong to
+one group.
+
+\routine{free\_runs(slots)}{free runs}
+\librarymeaning Walk along the seating register and identify every uninterrupted
+group of empty seats.
+
+\arguments A sequence of reader IDs and \texttt{None} values. An empty
+sequence is allowed.
+
+\steps Remember where a free group begins. When an occupied seat ends the
+group, record its start and length. Also record a group that reaches the
+end of the room.
+
+\result A new list of maximal free groups, in increasing seat-index order.
+The input is not modified. Empty and fully occupied rooms give an empty list.
+
+\example The diagram above gives \texttt{[(2, 2), (5, 1)]}.
+
+\routine{choose\_run(runs, k, allocator)}{choose run}
+\librarymeaning Decide where a reader requesting \texttt{k} adjacent seats should
+sit. This is a recommendation; it does not reserve seats.
+
+\arguments Valid free groups, a positive request size, and one of the
+existing \texttt{Allocator} enum values.
+
+\steps Inspect a copy of the groups in starting-index order. Ignore groups
+shorter than the request. First Fit takes the first fitting group; Best Fit
+keeps the shortest fitting group; Worst Fit keeps the longest. Equal lengths
+retain the lower index. Placement is always at the group's beginning.
+
+\result The chosen starting index, or \texttt{None} if no group fits.
+An invalid allocator or nonpositive request raises \texttt{ValueError}.
+The supplied groups are unchanged.
+
+\example For one seat in \texttt{X X . . X .}, First Fit returns 2,
+Best Fit returns 5, and Worst Fit returns 2. For three seats, all return
+\texttt{None}, although three seats in total are free.
+
+\section{A2: SeatPool --- the reservation register}
+
+The room stores a simple seat-owner list and a dictionary mapping each
+seated reader to their \texttt{(start, length)} reservation. The dictionary
+records exactly what must be returned on completion. No compaction or
+movement of existing reservations takes place.
+
+\routine{SeatPool.\_\_init\_\_(allocator, capacity=6)}{SeatPool constructor}
+\librarymeaning Open an empty reading room with the chosen seating policy.
+
+\arguments An allocator and a positive seat capacity, normally six.
+
+\steps Store the policy and capacity, fill the seating list with
+\texttt{None}, and create an empty reservation dictionary.
+
+\result A new room. Invalid capacity or allocator raises \texttt{ValueError}.
+Larger test rooms do not change the standard six-seat requirement.
+
+\example \texttt{SeatPool(Allocator.FIRST\_FIT)} opens six free seats.
+
+\routine{SeatPool.allocate(reader\_id, k)}{SeatPool allocate}
+\librarymeaning Reserve an entire adjacent group for a reader.
+
+\arguments A reader ID and a request between 1 and the room's capacity.
+
+\steps Reject an existing reservation for that ID or an invalid size.
+Find free groups and ask \texttt{choose\_run} for a starting index. Only
+after a fitting group is found, write the ID into all requested seats and
+record the reservation.
+
+\result The first reserved seat index. Return \texttt{None} if no group
+fits, without changing any seat or recording a partial reservation.
+Duplicate reservations and invalid sizes raise \texttt{ValueError}.
+
+\example Allocating two seats to R1 in an empty room returns 0 and makes
+seats 0--1 belong to R1. Index 0 is a successful result; callers must check
+\texttt{is None}, rather than treating zero as failure.
+
+\routine{SeatPool.release(reader\_id)}{SeatPool release}
+\librarymeaning Return exactly the seats reserved by the finishing reader.
+
+\arguments The ID of a seated reader.
+
+\steps Remove their reservation record and set those recorded seats to
+\texttt{None}. Leave all other readers' seats untouched. The next free-group
+scan naturally joins newly adjacent empty seats.
+
+\result The released \texttt{(start, length)}. A missing reservation,
+including a second release, raises \texttt{KeyError} without changing seats.
+
+\example Releasing R2 below joins both neighboring free groups:
+\begin{lstlisting}
+Before:  .   .  R2  R2   .   .
+After:   .   .   .   .   .   .
+Returned reservation: (2, 2)
+New free groups:      [(0, 6)]
+\end{lstlisting}
+
+\routine{SeatPool.free\_runs()}{SeatPool free runs}
+\librarymeaning Ask which adjacent groups are currently available in this room.
+
+\arguments No extra arguments; inspect this pool's seats.
+
+\steps Call the pure \texttt{free\_runs} function on the internal register.
+
+\result A separate list in starting-index order; no seating changes.
+
+\example An empty six-seat room returns \texttt{[(0, 6)]}.
+
+\routine{SeatPool.occupied}{SeatPool occupied property}
+\librarymeaning Count seats reserved, including seats belonging to readers still
+waiting for a librarian.
+
+\arguments A property read, with no extra arguments or parentheses.
+
+\steps Count non-\texttt{None} owners in the seating register.
+
+\result An integer between zero and capacity.
+
+\example \texttt{R1 R1 . . R2 .} has occupancy 3, although only two
+distinct readers hold reservations.
+
+\routine{SeatPool.largest\_free\_run}{SeatPool largest free run property}
+\librarymeaning Find the largest adjacent group another reader could use.
+
+\arguments A property read of the current room.
+
+\steps Scan current free groups and keep the greatest length.
+
+\result A length, with zero when the room is full. No state changes.
+
+\example \texttt{R1 R1 . . R2 .} gives 2.
+
+\routine{SeatPool.external\_fragmentation()}{SeatPool external fragmentation}
+\librarymeaning Measure how much free space lies outside the largest adjacent group.
+
+\arguments No extra arguments; use current occupancy and free groups.
+
+\steps Compute
+\[
+F_{\mathrm{ext}}=(\text{capacity}-\text{occupied})-
+                  \text{largest free group length}.
+\]
+\result A nonnegative integer; both empty and full rooms give zero.
+
+\example In \texttt{. . R2 R2 . .}, four seats are free but the largest
+group has two seats, so fragmentation is $4-2=2$. A three-seat request
+cannot fit. This indicator does not mean every scattered seat is unusable:
+one- and two-seat requests may still fit.
+
+\routine{SeatPool.snapshot()}{SeatPool snapshot}
+\librarymeaning Take a seating photograph for inspection or a later diagram.
+
+\arguments No extra arguments.
+
+\steps Copy the owner list into a tuple.
+
+\result An immutable tuple. Later allocations and releases do not alter
+previous photographs.
+
+\example Take a snapshot of an empty room, then seat R1; the saved
+snapshot still contains six \texttt{None} values.
+
+\section{A3: AdmissionQueue --- the line for seats}
+
+This queue is distinct from the ready queue. Admission asks whether a reader
+can enter the room; the scheduler chooses which admitted reader gets a
+librarian. Reader priority does not allow jumping the admission line.
+
+\routine{AdmissionQueue.\_\_init\_\_(pool)}{AdmissionQueue constructor}
+\librarymeaning Open a waiting line for a particular reading room.
+
+\arguments The \texttt{SeatPool} that will make reservations.
+
+\steps Keep the supplied pool and create an empty Python list of requests.
+
+\result An empty queue. It shares the real room, rather than copying it.
+
+\example Creating the queue does not reserve any seats.
+
+\routine{AdmissionQueue.enqueue(spec)}{AdmissionQueue enqueue}
+\librarymeaning Add an arriving reader to the end of the seating line.
+
+\arguments An existing, validated \texttt{ReaderSpec}; its ID and
+\texttt{space\_req} identify the request. The engine supplies arrival order,
+with lexicographic ID order for simultaneous arrivals.
+
+\steps Append the reader record. Do not sort by priority or change state.
+
+\result No return value and no seat reservation yet. The input parser is
+responsible for valid, unique IDs and feasible request sizes.
+
+\example Enqueuing R1, R2, then R3 preserves that order.
+
+\routine{AdmissionQueue.admit\_ready()}{AdmissionQueue admit ready}
+\librarymeaning Seat as many readers from the front as possible without queue jumping.
+
+\arguments No extra arguments; use the attached pool and waiting line.
+
+\steps Ask the pool to allocate for the first reader. After success,
+remove that reader and continue. On \texttt{None}, stop immediately without
+removing the request or considering later readers.
+
+\result A list of \texttt{(reader ID, first seat)} pairs in admission order.
+An empty or blocked queue returns an empty list. Allocation errors propagate,
+and the unsuccessful request remains queued. The engine records $M=t$ and
+changes admitted readers to READY.
+
+\example R1 requests four seats, R2 three, and R3 one. R1 is seated;
+R2 and R3 both wait despite two free seats. After R1 finishes, R2 receives
+seats 0--2 and R3 receives seat 3.
+
+\routine{AdmissionQueue.head}{AdmissionQueue head property}
+\librarymeaning Read the ID of the reader at the front of the line.
+
+\arguments A property read of the queue.
+
+\steps Inspect the first request if one exists.
+
+\result The ID, or \texttt{None} if empty. The reader is not removed.
+
+\example In the blocked example above, the head is R2.
+
+\routine{AdmissionQueue.waiting\_ids()}{AdmissionQueue waiting IDs}
+\librarymeaning Inspect the complete seating line in order.
+
+\arguments No extra arguments.
+
+\steps Build a new list of IDs from the queued reader records.
+
+\result A separate list; changing it cannot change the queue.
+
+\example The blocked line returns \texttt{["R2", "R3"]}.
+
+\routine{AdmissionQueue.\_\_len\_\_()}{AdmissionQueue length}
+\librarymeaning Count readers still outside waiting for seats.
+
+\arguments Normally called with \texttt{len(queue)}.
+
+\steps Return the length of the waiting list.
+
+\result An integer count, excluding readers already admitted.
+
+\example With R1 seated and R2/R3 waiting, \texttt{len(queue)} is 2.
+
+\section{A4: Room-usage statistics}
+
+\routine{PoolStats(name, capacity, ...)}{PoolStats constructor}
+\librarymeaning Produce an immutable room-usage report. The dataclass supplies
+this constructor automatically; there is no separate handwritten initializer.
+
+\arguments All seven fields, in the following order:
+\begin{center}
+\begin{tabular}{ll}
+\texttt{name} & Pool label: \texttt{"SPACE"} \\
+\texttt{capacity} & Number of seats \\
+\texttt{peak\_occupied} & Largest sampled occupied-seat count \\
+\texttt{occupied\_integral} & Total seat-time \\
+\texttt{max\_ext\_frag} & Largest sampled fragmentation value \\
+\texttt{start\_time} & Beginning of the observation window \\
+\texttt{end\_time} & End of that window
+\end{tabular}
+\end{center}
+
+\steps Store the supplied fields. The tracker supplies consistent values;
+the record itself does not repeat input validation.
+
+\result A frozen report. Field assignment raises \texttt{FrozenInstanceError}
+from Python's \texttt{dataclasses} module.
+
+\example \texttt{PoolStats("SPACE", 6, 4, 14, 0, 5, 12)} records a peak
+of four occupied seats and 14 units of seat-time.
+
+\routine{PoolStats.utilization\_pct}{PoolStats utilization property}
+\librarymeaning Calculate what percentage of available seat-time was reserved.
+
+\arguments A property read of a valid report. Let $K$ be capacity and
+$E=\text{end time}-\text{start time}$.
+
+\steps For positive elapsed time, calculate
+\[
+\text{utilization percentage}=
+\frac{\text{occupied integral}}{K E}\times100.
+\]
+\result A floating-point percentage, not a fraction. Zero elapsed time
+returns \texttt{0.0} to avoid division by zero.
+
+\example For 14 seat-time units, six seats, and seven time units,
+the result is $14/(6\times7)\times100=33.3333\ldots\%$.
+
+\routine{OccupancyTracker.\_\_init\_\_(capacity)}{OccupancyTracker constructor}
+\librarymeaning Open a usage log for the reading room.
+
+\arguments A positive room capacity.
+
+\steps Set counts and totals to zero. Leave first and last sample times
+unset until an observation arrives.
+
+\result An unsampled tracker. Nonpositive capacity raises \texttt{ValueError}.
+
+\example A tracker created for six seats does not assume the first arrival
+is at time zero.
+
+\routine{OccupancyTracker.sample(t, pool)}{OccupancyTracker sample}
+\librarymeaning Record the room's state after the engine finishes all events at $t$.
+
+\arguments An integer virtual timestamp and a pool of the tracker's capacity.
+
+\steps Reject a backward time or capacity mismatch before changing the log.
+On the first sample, remember the starting time. Otherwise add previous
+occupancy multiplied by elapsed time to the integral. Then save today's
+occupancy and update the maximum occupancy and fragmentation.
+
+\result No return value. Invalid observations raise \texttt{ValueError}.
+Equal timestamps are allowed: they add no elapsed seat-time, and the later
+observation becomes the current state. Every supplied observation can update
+the peaks; the engine must therefore sample only the final state at each timestamp.
+
+\example If two seats were occupied at $t=5$ and four are occupied at $t=8$,
+add $2(8-5)=6$, not $4(8-5)$. New reservations do not apply retroactively.
+
+\routine{OccupancyTracker.finish(end\_time)}{OccupancyTracker finish}
+\librarymeaning Produce a room-usage report through a chosen ending time.
+
+\arguments An ending timestamp no earlier than the last sample.
+
+\steps Add the final interval using the most recent occupancy to a local
+copy of the integral, then construct \texttt{PoolStats}. Do not move the log's
+clock or change its totals.
+
+\result A report. Repeated calls do not double-count. A backward end time
+raises \texttt{ValueError}. Without samples, return all-zero usage with both
+start and end equal to the supplied ending time.
+
+\example Finishing twice at time 12 returns the same report. Finishing
+later can extend the report without changing the underlying observations.
+
+\subsection{Worked occupancy timeline}
+\begin{center}
+\begin{tabular}{rrrr}
+\textbf{Interval} & \textbf{Occupied seats} & \textbf{Duration} & \textbf{Seat-time} \\
+$[5,8)$ & 2 & 3 & 6 \\
+$[8,10)$ & 4 & 2 & 8 \\
+$[10,12)$ & 0 & 2 & 0 \\
+\hline
+Total & & 7 & 14
+\end{tabular}
+\end{center}
+The window starts at 5, not 0. Peak occupancy is four and utilization is
+$14/42\times100\%$. In a successful simulation the window runs from first
+arrival to last completion. Unsampled intermediate states do not affect peaks.
+
+\section{A5: Tests and integration evidence}
+
+The tests in \texttt{tests/contract/test\_memory\_contract.py} use small,
+hand-calculated examples. No external test framework is required.
+
+\routine{reader(reader\_id, seats)}{Test reader helper}
+\librarymeaning Prepare a reader's seating request for a queue test.
+
+\arguments An ID and a seat count.
+
+\steps Construct the existing \texttt{ReaderSpec} with arrival zero,
+priority one, service one, category REGULAR, and the requested seats.
+
+\result A reader specification. This helper neither seats the reader nor
+runs a simulation; it keeps test examples readable.
+
+\subsection{What each test group establishes}
+\begin{description}
+\item[AllocationFunctions] Empty/full/boundary free groups, input preservation,
+the specification's FF/BF/WF choices, distinct policy choices in a larger test
+room, tie-breaking, exact fit, no fit, and invalid arguments.
+\item[SeatReservations] Six-seat defaults, full-capacity and one-seat
+requests, placement by policy, fragmented failures with no partial reservation,
+exact release, coalescing on both sides, duplicate/invalid reservations,
+double release, configurable capacity, and immutable snapshots.
+\item[AdmissionLine] Empty queue behavior, caller-supplied ordering,
+independent inspection lists, blocked heads, retained requests, and admission
+of every fitting reader after a release.
+\item[OccupancyStatistics] Hand-calculated integrals, initial/ending idle
+intervals, first arrival after zero, last-interval accounting, repeatable reports,
+equal timestamps, sampled peaks, fragmentation peaks, zero duration, frozen
+reports, full utilization, and rejected observations without log corruption.
+\item[MemoryWithExistingEngine] A hand-calculated FIFO example under both
+schedulers and all three allocators, final seat conservation, reader termination,
+and equality with the resource-free Final engine baseline.
+\end{description}
+
+\subsection{Worked engine check}
+All three readers arrive at zero, with equal priority:
+\begin{center}
+\begin{tabular}{lrrrrr}
+\textbf{Reader} & \textbf{Seats} & \textbf{Service} & \textbf{Admission} & \textbf{Start} & \textbf{Completion} \\
+R1 & 4 & 4 & 0 & 0 & 4 \\
+R2 & 3 & 2 & 4 & 4 & 6 \\
+R3 & 1 & 1 & 4 & 4 & 5
+\end{tabular}
+\end{center}
+R3 waits behind R2 until R1 releases its seats. Occupancy is four during
+$[0,4)$, four during $[4,5)$, and three during $[5,6)$.
+Thus seat-time is $4\times4+4\times1+3\times1=23$, peak occupancy is four,
+fragmentation is zero, and utilization is $23/36\times100\%$.
+
+The existing engine-versus-A1 cross-check uses the Python A1 inputs and golden
+files. It checks 11 bundled workloads plus 200 seeded random workloads under
+both schedulers. A room large enough for the sum of all readers' requests
+cannot delay admission, so this is a sufficient unlimited-memory baseline
+without allocating a million test seats. Golden output contents and scheduling
+assertions are unchanged.
+
+\subsection{Running the checks}
+Run these commands from the repository root:
+\begin{lstlisting}[language=bash]
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+  tests.contract.test_memory_contract -v
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+  tests.contract.test_pyi_conformance -v
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest \
+  discover -s tests -t . -v
+\end{lstlisting}
+For the standalone Python A1 baseline, change to
+\texttt{Assignment\_1-OS\_Lab\_Python} and run:
+\begin{lstlisting}[language=bash]
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
+\end{lstlisting}
+
+\section{Design choices and remaining work}
+
+Explicit loops and basic Python containers make the algorithms easy to trace
+in the viva. The implementation favors clarity over search-speed optimization.
+It introduces no new public API and makes no changes to the interface contract.
+
+Strict FIFO admission improves arrival-order fairness but can leave usable
+seats idle behind a blocked head. Fragmentation can prevent a large request
+even when enough seats are free in total. Neither allocation compaction nor
+bypassing the head is part of this implementation.
+
+This delivery covers Aarush A1--A5 and their documentation. Comparison
+experiments, the separate A7c fake, Final resource synchronization, and
+submission packaging remain later tasks. The deprecated C++ implementation
+is not required to run the tests.
+
+\end{document}
