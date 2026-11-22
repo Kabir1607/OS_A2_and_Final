@@ -1,0 +1,379 @@
+SMART LIBRARY: DIVISION OF WORK (A1 port, A2, Final)
+=====================================================
+
+Interface contract: library_sim.pyi (repo root). Every function you
+provide or call is specified there: inputs, outputs, errors and who owns
+it. Code against it, not against someone's half-finished file. If you
+need a signature changed, tell the group, then edit the .pyi.
+
+Common rules (everyone)
+- Python 3.10+, standard library only at runtime. Tests use `unittest`
+  (they also run under pytest).
+- One module per responsibility, as laid out at the top of the .pyi.
+- Only the engine's coordinator thread touches Reader / ReadyQueue /
+  SeatPool / AdmissionQueue. Worker threads only touch ResourceManager and
+  Tracer. No sleep() for correctness, no busy-waiting.
+- Same input + options => same output (except the order of racing trace events).
+- Each owner writes unit tests for their own module plus their README section(s).
+- Shared fakes: each owner publishes tests/fakes/fake_<module>.py and
+  tests/contract/test_<module>_contract.py EARLY (see the .pyi header).
+  Test against other people's published fakes, never against private ones.
+- Read the "[CONTRACT 1-6]" rules in the .pyi that touch your module. They
+  cover behaviour between modules that the formats alone don't pin down.
+- Everyone must be able to explain the WHOLE system in the viva.
+
+
+-----------------------------------------------------------------------
+Kabir: foundation: A1 port, shared models, scheduling, parsing, metrics, output
+-----------------------------------------------------------------------
+Modules: errors.py, models.py, scheduler.py, a1.py, parser.py, metrics.py, output.py
+(Everyone imports these first, so they're the critical path. Push models.py
+and errors.py on day 1, even before the logic is finished.)
+
+K1. errors.py: InputError(message, line_no), UsageError.
+K2. models.py: constants (NUM_LIBRARIANS, SEAT_CAPACITY, STANDARD_RESOURCES),
+    State + LEGAL_TRANSITIONS, Scheduler/Allocator/ActionType enums,
+    ReaderSpec, ResourceSpec, Action, SimulationInput (incl. actions_for),
+    Reader (with transition() asserting legality), ReaderResult.
+K3. scheduler.py: fcfs_key, priority_key, key_for, heap-based ReadyQueue
+    (push/pop/peek/len/contains, duplicate push -> ValueError).
+K4. a1.py: faithful port of the C++ A1 (read_a1_input, fcfs,
+    priority_schedule, a1_main). Librarian 0 wins ties.
+K5. A1 regression: a test that runs all 10 tests/inputs x {FCFS, PRIORITY}
+    and diffs byte-for-byte against Assignment_1-OS_Lab_C++/tests/expected/*.out.
+    Also port run_tests.sh to Python.
+K6. parser.py: parse_text / parse_file / parse_reader_row for the N, Q and
+    7-field reader section, with all A2 validation (see .pyi docstring), A2
+    mode rejecting extra content, FINAL mode handing off to Samar's
+    parse_resource_sections (imported lazily, only in FINAL mode [CONTRACT 6]).
+    Error messages carry line numbers.
+K7. Parser tests: one bad-input file per rule (N=0, missing rows, duplicate
+    ID, SPACE_REQ=7, TABLE_REQ=1, non-integer field, empty file, trailing
+    blank lines OK, CRLF OK).
+K8. metrics.py: compute_process_metrics (incl. the identity
+    WAITING = MEM_WAIT + READY_WAIT + RESOURCE_WAIT) and compute_summary
+    (all 8 SUMMARY values, E = max C - min A).
+K9. output.py: fmt_decimal (4 dp), format_a1 (6 dp, identical to C++),
+    format_a2, format_final (RESOURCE + CHECK lines), write_output.
+    Golden-string tests for each format.
+K10. Cross-check with Urvashi: Simulation(pool_capacity=10**6) on every A1
+    input (SPACE_REQ=1) gives the same START/COMPLETION as the A1 port.
+K10b. Publish fakes + contract tests for models/scheduler/parser/metrics/output
+    first (everyone depends on these).
+K11. README: retained A1 algorithms, metrics definitions, output formats,
+    decimal precision.
+
+
+-----------------------------------------------------------------------
+Urvashi: simulation engine (virtual clock, lifecycle, integration) + CLI + packaging
+-----------------------------------------------------------------------
+Modules: engine.py, cli.py, main.py for each zip
+Depends on: Kabir (models, scheduler, parser, metrics, output), Aarush
+(SeatPool, AdmissionQueue, OccupancyTracker), Samar (ResourceManager,
+WorkerPool, Tracer, PreventionPolicy, find_cycles). Start with fakes from
+the .pyi.
+
+U1. Discrete-event loop for A2: next-event-time computation (arrivals,
+    completions), integer virtual clock, no real sleeping, idle gaps.
+U2. Exact A2 event order at a timestamp: completions (ascending ID) ->
+    arrivals (ascending ID) -> FIFO admission retry -> fill idle librarians
+    (lower-numbered first). Sample OccupancyTracker once at the end of each t.
+U3. Lifecycle state machine: every transition goes through
+    Reader.transition() (NEW -> BLOCKED_MEMORY/READY -> RUNNING -> TERMINATED).
+    Records M, S (first dispatch), C.
+U4. Final extension, steps 1-7 at each t (see the Simulation docstring):
+    per-reader action pointer and executed-service tracking, next action
+    time = dispatched_at + (offset - executed_at_dispatch), RELEASE at
+    offset == SERVICE before completion, ActionBatch building (all actions at
+    the current offset, row order), sending batches to WorkerPool, handling
+    BLOCKED (free the librarian, keep seats, BLOCKED_RESOURCE, blocked_since)
+    and woken readers (READY, resource_wait += t - blocked_since, original
+    arrival key). Repeat steps 1-7 until nothing changes at t.
+U5. No-hang guarantee: if no future event exists but readers are
+    unfinished, stop, ask Samar's find_cycles(wait_for_graph()) for the
+    cycles, fill SimulationResult.incomplete / deadlock_cycles / CHECK stats.
+U5b. Implement the engine-side contracts from the .pyi:
+    [1] action pointer (+done after a batch, +1 at wake, never re-run the
+        blocked ACQUIRE);
+    [2] apply all blocked results before all woken lists in a round
+        (blocked-and-woken in the same round -> READY, resource_wait += 0);
+    [3] emit ARRIVE/BLOCK_MEMORY/ADMIT/DISPATCH/UNBLOCK/COMPLETE/DEADLOCK;
+    [4] CHECK exclusivity = max(manager count, trace.audit_exclusivity);
+    [6] import the Final-only modules lazily; A2 mode must run with
+        resources/workers/deadlock/trace deleted (test this).
+    Each gets a contract test in tests/contract/test_engine_contract.py.
+U6. End-of-run invariants (assertions): all seats free, ResourceManager.nothing_held(),
+    every reader TERMINATED, A <= M <= S <= C.
+U7. cli.py: a2_main and final_main (argument parsing, enum validation,
+    InputError/UsageError -> stderr + exit 1, --trace, --policy
+    ROLLBACK|ORDERED, --stats (PolicyStats + wall time to stderr only),
+    --demo-deadlock). Default policy = DEFAULT_POLICY from deadlock.py.
+U7a. --demo-deadlock [INPUT_FILE] calls deadlock.run_unsafe_demo [CONTRACT 5]
+    and prints the three reports side by side. a2_main imports only A2
+    modules [CONTRACT 6].
+U7b. SimulationResult.policy_stats + wall_time_s (time.perf_counter around run()).
+U8. Packaging: two independent zips (A2/ and Final/), each with its own
+    main.py, a copy of library_sim/, README, inputs, tests. Plus a build
+    script that creates both and smoke-tests each from a clean directory.
+    The A2 build never emits CHECK lines, and the A2 zip ships WITHOUT
+    resources.py / workers.py / deadlock.py / trace.py / resource_parser.py
+    [CONTRACT 6]: the smoke test proves it runs without them.
+    The Final zip must also contain the sample inputs and the presentation
+    material (slides/demo script), per Final spec section 14.
+U9. Integration tests: (a) every A2 input run in Final mode gives identical
+    numbers with RESOURCE_WAIT = 0, no RESOURCE lines, CHECK 0/0/N;
+    (b) a reader blocked for memory or a resource never gets service;
+    (c) the spec's REFERENCE_BOOK/JOURNAL workload completes under both
+        schedulers x both policies; (d) every Final test input passes under
+        BOTH --policy ROLLBACK and --policy ORDERED (complete, 0 violations,
+        0 deadlocks, nothing held); (e) resource-free inputs give identical
+        output under both policies; (f) determinism: every A2 input and
+        resource-free Final input, run twice per scheduler x allocator,
+        gives byte-identical output.
+U9g. Publish fake_engine (simulate() returning a fixed SimulationResult)
+    early, so Aarush's experiments.py and Samar's run_unsafe_demo can be
+    built before the real engine works.
+U10. README: integrated architecture diagram, event ordering, virtual time
+    vs real thread execution, build/run/import/export, assemble the final README.
+U11. Presentation: own the 5-minute demo script. It must show all five
+    pieces of evidence from Final spec section 10, each with a prepared input:
+    1 scheduling: FCFS vs PRIORITY changes order/response/waiting;
+    2 memory: allocators change placement/fragmentation/waiting;
+    3 concurrency: two workers overlapping (S5b), a book never
+      double-allocated, different copies held at the same time;
+    4 deadlock: bounded unsafe demo (NONE) vs ROLLBACK and ORDERED;
+    5 integration: a reader blocked for memory or a book gets no service,
+      and a release lets others progress.
+    Plus the A2-compatible baseline run (Final spec section 9.1 (i)).
+
+
+-----------------------------------------------------------------------
+Aarush: memory management (A2 core) + experiment harness (A2 allocators, Final policies)
+-----------------------------------------------------------------------
+Modules: memory.py, experiments.py
+Depends on: Kabir's models only for memory.py, so you can start immediately.
+experiments.py needs Urvashi's simulate() (use a fake until then).
+
+A1. free_runs() and choose_run() as pure functions (FIRST/BEST/WORST fit,
+    lowest-start tie-break, place at the run's lowest index).
+A2. SeatPool: allocate / release (exact slots, coalescing), occupied,
+    largest_free_run, external_fragmentation, snapshot. Configurable
+    capacity (default 6) for tests only. Never overlap, never over-capacity.
+A3. AdmissionQueue: strict FIFO, head-of-line blocking, admit_ready() loops
+    until the head blocks, never drops requests.
+A4. OccupancyTracker + PoolStats: occupied-slot integral over [min A, max C],
+    peak occupancy, max F_ext, sampled once per timestamp; utilization_pct.
+A5. Unit tests: the spec example (X X . . X . -> FF 2 / BF 5 / WF 2),
+    exact fit, equal-sized holes, k = 1 and k = 6, coalescing on release,
+    head-of-line blocking (R1=4, R2=3 blocked, R3=1 stuck behind),
+    fragmentation values.
+A6. A2 edge-case input files + hand-verified expected outputs (all 6
+    combinations each): simultaneous arrivals, initial idle time, requests
+    behind a blocked head, simultaneous completions, size-1 and size-6
+    requests, multiple free runs, long gaps.
+A7. Design the required comparison input that actually separates First /
+    Best / Worst Fit within 6 seats. Run 2 schedulers x 3 allocators,
+    build the comparison table (scheduling + memory metrics), and explain
+    every difference (placement, memory wait, fragmentation, completion order).
+A7b. experiments.py: run_once, compare_allocators (feeds A7), and
+    compare_policies: every (input, scheduler, policy) cell repeated N
+    times (default 30, since races change results), aggregated as
+    mean/min/max (PolicyComparisonRow). Also better_policy_by_metric and
+    format_markdown. Fail loudly if any run is incomplete or unsafe.
+    experiments.py ships in both zips: import the Final-only modules only
+    inside the policy functions [CONTRACT 6].
+A7c. Publish fake_memory + memory contract tests early (Urvashi's engine needs them).
+A8. Optional extra (if time allows): ASCII memory map / allocation
+    timeline in the trace (must not change graded output).
+A9. README: allocation algorithms, FIFO admission + head-of-line
+    blocking, fairness vs utilization, how memory changes A1 results, the
+    A2 comparison section and A2 assumptions/limitations.
+A10. Assemble the complete A2 README for the A2 zip (A2 spec section 14):
+    scenario, architecture, allocation algorithms, the A1 schedulers kept,
+    assumptions, metrics, comparison results, known limitations, optional
+    extensions, build/run, import/export. Pull sections from Kabir (K11) and
+    Urvashi (U10), and check it against the A2 spec section 16 checklist.
+
+
+-----------------------------------------------------------------------
+Samar: concurrency, synchronization, deadlock (Final core)
+-----------------------------------------------------------------------
+Modules: resource_parser.py, trace.py, resources.py, workers.py, deadlock.py
+Depends on: Kabir's models/errors only, so you can start immediately.
+
+S1. resource_parser.py: parse the R and K sections and validate_actions
+    (declared/standard IDs, capacity 1, units 1, 0 <= offset <= SERVICE,
+    per-reader replay: no release-without-hold, no double acquire, nothing
+    held at the end). Clear InputError messages with line numbers.
+S2. trace.py: thread-safe Tracer (lock + global seq), TraceEvent with
+    thread name, format_event, audit_exclusivity (independent replay,
+    also flags RELEASE/ROLLBACK by a non-holder). Follow the event-shape
+    table in [CONTRACT 3]: one ROLLBACK event per book, and HANDOFF names
+    the NEW holder, straight after the RELEASE/ROLLBACK.
+S3. resources.py: ResourceManager with threading.Lock/Condition. Emit
+    trace events INSIDE the lock [CONTRACT 3]. acquire() raises RuntimeError
+    on a re-acquire by the holder or a waiter [CONTRACT 1]. Atomic
+    check-and-update, FIFO waiters per resource, direct handoff on release
+    (no lost wake-ups, no stealing), double-release detection, per-resource
+    stats (max holders, acquisitions, wait events), exclusivity counter,
+    wait_for_graph, nothing_held.
+S4. Implement BOTH prevention policies inside ResourceManager, selectable
+    per run (exact rules in the PreventionPolicy docstring in the .pyi):
+    - ROLLBACK: breaks hold-and-wait. A reader that would wait while holding
+      releases everything and waits for the whole set, granted atomically.
+    - ORDERED: breaks circular wait. Global rank = sorted resource IDs. A
+      reader may only WAIT for a resource ranked above all it holds. A free
+      resource is granted in any order. An out-of-order wait releases only
+      the higher-ranked held books, then re-acquires them in ascending order.
+    Neither policy may reject an input because of its acquisition order.
+    Also resource_rank() and the PolicyStats counters (policy_stats()).
+S4b. Policy unit tests, the same suite run against both policies: in-order
+    pair, reversed pair (circular), 3-reader cycle, out-of-order but
+    uncontended acquire (ORDERED must NOT roll back), a reader needing 3
+    books, rollback that wakes another reader, handoff chains. Assert
+    held_while_waiting == 0 under ROLLBACK, and the ordered-wait invariant
+    under ORDERED (checked inside the lock).
+S5. workers.py: WorkerPool over real threads (ThreadPoolExecutor or
+    threading.Thread + queue), run_batches returns results in order,
+    re-raises worker exceptions, no sleep. Show >= 2 workers overlapping
+    (thread names in the trace).
+S5b. Overlap evidence (Final spec section 4.1): with tiny tasks, a thread pool
+    may run two batches one after the other on the SAME thread, so the
+    trace would show no overlap. Record real perf_counter start/end
+    intervals per batch, make sure contending batches run on distinct
+    threads (e.g. a Barrier before the critical section in a contention
+    workload), and print an "overlap" line in the trace naming both
+    threads. Stress tests use sys.setswitchinterval(1e-6) to force more
+    thread switches (in tests only).
+S6. deadlock.py: find_cycles, UNSAFE_DEMO_INPUT (inputs/deadlock_unsafe.txt,
+    the spec workload with R2 reversed), and run_unsafe_demo, which runs
+    the REAL engine once per policy [CONTRACT 5]. It is bounded because the
+    engine stops when no progress is possible, so no timeouts are needed.
+    NONE reports the cycle and UNRESOLVED_DEADLOCKS = 1. ROLLBACK and
+    ORDERED both complete, and the trace shows how each broke the cycle.
+    Build it against fake_engine until the real engine works.
+S6b. Optional: run_blocking_demo (Barrier + Condition.wait(timeout)) with
+    real thread blocking, using the SAME ResourceManager.
+S6c. Publish fake_resources (with direct handoff and the [CONTRACT 3]
+    trace events), fake_workers and their contract tests EARLY. The
+    engine's correctness depends on the fake behaving like the real one.
+S7. Concurrency tests + stress tests: many readers racing for the same
+    book (holders never > 1), different copies in parallel (OS_BOOK_3 and
+    OS_BOOK_7 held simultaneously), release -> wake-up, repeated
+    acquisitions, equal-offset simultaneous requests, randomized workloads
+    run many times checking invariants (0 violations, nothing held at end).
+S8. Final input files: the spec workload, the reversed-order unsafe
+    workload (must complete under both policies), a reader blocked while
+    holding a book, and the interaction with memory blocking.
+S8b. Policy comparison workloads (inputs/policy/*.txt). Each is designed to
+    test ONE hypothesis below, and we keep whatever the numbers actually show:
+    P1 in-order, low contention (spec workload). Expect a tie on metrics,
+       ORDERED with 0 rollbacks vs ROLLBACK with some (less churn for ORDERED).
+    P2 in-order, high contention, long holds. ROLLBACK frees books earlier,
+       so others may wait less. ORDERED holds while waiting (convoy).
+    P3 reversed order / circular (R1: REF->JOURNAL, R2: JOURNAL->REF, and a
+       3-reader cycle). Both are safe. Compare rollbacks and resources_rolled_back.
+    P4 out-of-order but uncontended. ORDERED does nothing extra.
+       ROLLBACK does nothing either. Check that both have zero overhead.
+    P5 multi-book reader vs a stream of single-book readers. ROLLBACK's
+       all-or-nothing wait may starve it (max_resource_wait). ORDERED
+       progresses step by step.
+    P6 randomized stress (many readers, many copies, random orders), with
+       wall_time_s as the synchronization-overhead measure.
+S8c. With Aarush: run compare_policies on P1-P6 x {FCFS, PRIORITY},
+    30 repeats. Write the "which policy wins where, and why" table, then
+    pick DEFAULT_POLICY with a one-paragraph justification. Commit the
+    choice in deadlock.py before Urvashi builds the Final zip.
+S9. README: Coffman conditions in the Library, threading model + GIL note
+    (concurrency, not parallelism, so locks are still needed), primitives
+    used and why, ownership/waiting rules, BOTH prevention designs (which
+    Coffman condition each breaks, and why each accepts any input order),
+    the ROLLBACK vs ORDERED comparison table and the default-policy choice,
+    limitations (no offset rewind, possible starvation under ROLLBACK,
+    convoying under ORDERED), and the deadlock demo under NONE/ROLLBACK/ORDERED.
+    Also justify: (a) why "returns BLOCKED + rescheduled by the coordinator"
+    is the spec's "equivalent thread-safe event mechanism" (section 5.2)
+    and how direct handoff prevents lost wake-ups and stranded waiters;
+    (b) the fairness assumption (FIFO waiters per resource, no strict lock
+    fairness); (c) why process-state transitions are race-free: confined to
+    the coordinator thread (section 4.1); (d) the code never relies on the GIL
+    for atomicity, so it would stay correct on a free-threaded build.
+
+
+-----------------------------------------------------------------------
+Deadlock prevention policy (formerly G1)
+-----------------------------------------------------------------------
+Both ROLLBACK and ORDERED are built (Samar S4), tested (S4b, U9d),
+measured (Aarush A7b + Samar S8b/S8c) and documented (S9). DEFAULT_POLICY
+is chosen from the measurements and committed before the Final zip
+(U8). The non-default policy stays available via --policy and is shown in
+the demo and the README as the comparison.
+
+
+-----------------------------------------------------------------------
+Shared / group tasks (not yet settled)
+-----------------------------------------------------------------------
+G2. Code review against library_sim.pyi. Each person reviews the module
+    that consumes theirs: Kabir <-> Urvashi, Aarush -> Urvashi,
+    Samar -> Urvashi, Urvashi -> Samar. A PR is merged only after review.
+G3. README "trade-offs" section (mandatory, Final spec section 10): waiting
+    time vs throughput vs service/memory/shared-resource utilization vs
+    fairness vs synchronization overhead vs deadlock avoidance. Everyone
+    contributes from their own measurements, and Urvashi folds it into
+    the Final README.
+G4. Presentation + viva prep: each person explains one OTHER person's
+    module in a dry run (all members are assessed on the whole system).
+    Rehearse the 5-minute demo (U11) at least once, timed.
+G5. README "Assumptions", "Limitations" and "Optional features" sections
+    (Final spec section 13, A2 spec section 14). Owner: Kabir, who collects
+    entries from everyone:
+    - TA-approved assumptions (context.md, "Confirmed assumptions").
+    - Our own choices: E = max C - min A; a reader's actions are
+      stable-sorted by offset (the spec says input rows are already in
+      non-decreasing order, so valid inputs are unaffected); the ORDERED
+      "free grants in any order" rule; no offset rewind after a rollback;
+      RESOURCE lines for every declared resource even when K = 0; exit codes;
+      4-decimal output.
+    - Not applicable to Library: preemption, Round Robin, quantum expiry,
+      the TABLE pool (Final spec section 11 asks to test these, so say why we don't).
+    - Optional features actually built (experiments harness, --stats,
+      --trace, policy comparison, any memory map).
+G6. Final pre-submission check: tick off the A2 spec section 16 and Final
+    spec section 15 checklists line by line on the actual zips, unzipped in
+    a clean directory with a plain `python3`.
+
+
+-----------------------------------------------------------------------
+Integration phase (lead: Urvashi; everyone must be available)
+-----------------------------------------------------------------------
+Independent work ends at "every module passes its own unit + contract
+tests against the shared fakes". After that, the steps below are SEQUENTIAL
+and need the whole group. Plan enough time before the deadline to fix
+what integration turns up.
+
+Gate 0  Contracts frozen. models.py/errors.py merged (Kabir), all
+        fakes and contract tests published (everyone). From here, any .pyi
+        change needs the group's OK.
+Gate 1  Real modules pass their contract tests: the real ResourceManager
+        passes the same contract tests as fake_resources, and so on. Owner: each person.
+Gate 2  A2 integration (Urvashi + Aarush + Kabir): the engine runs on the
+        real memory/scheduler/metrics/output. A2 tests pass: Aarush's
+        hand-verified A6 outputs, the K10 cross-check vs the A1 port, U9f
+        determinism. Then the A2 allocator comparison (A7) and the A2 README
+        (A10), and the A2 zip is built and smoke-tested without the Final
+        modules (U8). The A2 checkpoint is done here.
+Gate 3  Final integration (Urvashi + Samar): the engine on the real
+        ResourceManager/WorkerPool. U9a-e pass under BOTH policies, the
+        overlap evidence is visible (S5b), and run_unsafe_demo works end to
+        end (S6).
+Gate 4  Experiments (Aarush + Samar): compare_policies on P1-P6 (S8c),
+        then DEFAULT_POLICY is committed.
+Gate 5  Docs + demo (everyone): README results, trade-offs (G3),
+        assumptions/limitations (G5), Final README assembled (U10), demo
+        script (U11), Final zip (U8), checklist (G6), viva dry run (G4).
+
+Rules during integration
+- A failing integration test goes to the owner of the module whose
+  CONTRACT rule was broken. If the rule was unclear, fix the .pyi first,
+  then the code.
+- No gate is skipped. Gate 2 (the A2 zip) must not wait on Gate 3.
