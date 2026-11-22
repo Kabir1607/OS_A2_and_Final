@@ -4,7 +4,7 @@ library_sim.pyi: interface contract for the Smart Library simulator
 
 This file sets out the agreed inputs and outputs of every module. It is
 not runnable code. Each section below is one real module that its owner
-implements as `library_sim/<module>.py`. If you depend on someone else's
+implements as `src/library_sim/<module>.py`. If you depend on someone else's
 section, code against the signatures here and don't wait for their
 implementation. While their module isn't ready, write a tiny fake that
 follows the same signature.
@@ -13,9 +13,12 @@ Changing a signature: tell the group first, then edit this file. This
 file is the source of truth, and the code must follow it, not the other
 way round.
 
-Proposed package layout (Python 3.10+, standard library only at runtime):
+Package layout (Python 3.10+, standard library only at runtime). The code
+lives under src/ so this stub doesn't shadow the package in IDEs and type
+checkers. See DEVELOPMENT.md for running the tests, including
+tests/contract/test_pyi_conformance.py, which checks every module against this file.
 
-    library_sim/
+    src/library_sim/
         __init__.py
         errors.py          Kabir
         models.py          Kabir

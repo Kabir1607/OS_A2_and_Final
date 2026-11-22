@@ -1,0 +1,180 @@
+My modules (K1-K11) are done and tested, and you can build on them now.
+Here's how to use them. The full signatures are in library_sim.pyi, and
+DEVELOPMENT.md has the repo layout.
+
+
+1. WHERE THE CODE IS
+--------------------
+  src/library_sim/     errors, models, scheduler, parser, metrics, output, a1
+  tests/contract/      one contract test file per module
+  tests/integration/   cross-module tests (they skip until the modules they need exist)
+  tests/fakes/         put your shared fakes here (see tests/fakes/README.md)
+  docs/readme/         README sections (mine are there, add yours)
+
+Put YOUR module in src/library_sim/ too (memory.py, engine.py,
+resources.py, ...). Use relative imports inside the package:
+
+    from .models import ReaderSpec, State
+    from .errors import InputError
+
+Why src/: a library_sim/ folder next to library_sim.pyi would be shadowed
+by the stub in VS Code / Pylance / mypy, and imports would show as broken.
+
+To use the package from a script or the REPL, run from the repo root with:
+
+    PYTHONPATH=src python3 your_script.py
+
+
+2. BEFORE EVERY PR, RUN
+-----------------------
+    python3 -m unittest discover -s tests -t . -v               # all tests
+    python3 -m unittest tests.contract.test_pyi_conformance -v  # does my module match the .pyi?
+
+The conformance test reads library_sim.pyi and checks every module that
+exists in src/library_sim/ against it: parameter names and order,
+dataclass fields and their order, enum values, properties and constants.
+Modules that don't exist yet are skipped. So when you add memory.py, it
+immediately tells you if you named something differently from the
+contract. (I tested it by breaking things on purpose; it caught every one.)
+
+Everything runs on Python 3.10+, standard library only. Tests use unittest.
+
+
+3. THE MODULES
+--------------
+No fakes are needed for my modules: the real ones are finished.
+
+errors.py
+    InputError(message, line_no=None): str(e) gives "line 4: SERVICE must be >= 1"
+    UsageError(message):                bad command-line arguments
+    In the CLI, catch both, print f"Error: {e}" to stderr, return 1, and
+    write no output file.
+
+models.py (shared types)
+    NUM_LIBRARIANS = 2, SEAT_CAPACITY = 6, STANDARD_RESOURCES (the 17 names)
+    Scheduler / Allocator / ActionType: str enums, so Scheduler("FCFS") parses
+        a CLI argument (case-sensitive, ValueError if unknown)
+    State + LEGAL_TRANSITIONS: the lifecycle table
+    ReaderSpec(id, arrival, priority, service, category, space_req=1, table_req=0): frozen
+    ResourceSpec(id, capacity)
+    Action(reader_id, work_offset, action, resource_id, units, row_index)
+    SimulationInput(quantum, readers, resources=(), actions=(), has_resource_section=False)
+        .n, .reader(id), .actions_for(id)  (sorted by (offset, row_index))
+        readers are in FILE order, not sorted
+    Reader(spec, actions=(), ...): mutable runtime state, coordinator thread only
+        .transition(new_state) raises AssertionError on an illegal move,
+        e.g. NEW -> RUNNING. Use it for EVERY state change.
+    ReaderResult(id, arrival, priority, service, start, completion, mem_admit,
+                 resource_wait=0): what the engine hands to metrics
+
+scheduler.py
+    q = ReadyQueue(Scheduler.PRIORITY)
+    q.push(spec)     # ValueError if that ID is already queued
+    q.pop()          # best reader by key; IndexError when empty
+    q.peek(), len(q), bool(q), "R1" in q
+    Keys: FCFS (arrival, id), PRIORITY (priority, arrival, id). IDs compare
+    as strings ("R10" < "R2"). A reader coming back from BLOCKED_RESOURCE:
+    push its original spec again; it keeps its original arrival time.
+
+parser.py
+    inp = parse_file(path, "A2")        # or "FINAL"; also parse_text(text, mode)
+    All the spec's validation is done, with line numbers (InputError).
+    A2 mode: anything after the reader rows is an error.
+    FINAL mode: if more lines follow, it calls Samar's
+        resource_parser.parse_resource_sections(lines, start, readers)
+    (imported only in that case, so the A2 zip works without the file).
+
+metrics.py
+    metrics = compute_process_metrics(results)    # results: list of ReaderResult
+    summary = compute_summary(metrics)
+    Metrics come out sorted by ID. It ASSERTS A <= M <= S <= C and that no
+    waiting component is negative. If it fails, the bug is in whatever
+    produced the timestamps (usually the engine), not in metrics.
+
+output.py
+    text = format_a2(metrics, summary, pool)
+    text = format_final(metrics, summary, pool, resources, checks)
+    write_output(output_path, text)              # UTF-8, '\n' line endings
+    fmt_decimal(x) -> 4 decimal places (only needed if you print stats yourself)
+    output.py only READS these attributes, so they must exist with exactly
+    these names (as in the .pyi):
+      pool:      name, capacity, peak_occupied, utilization_pct (property), max_ext_frag
+      resources: resource_id, capacity, max_simultaneous_holders, acquisitions, wait_events
+      checks:    exclusivity_violations, unresolved_deadlocks, completed_count
+    It sorts resources by ID itself. Pass [] for no resources; the CHECK
+    lines are still written.
+
+a1.py
+    The A1 port (byte-identical to the C++ output). run_a1(readers, scheduler)
+    is the reference the engine is checked against in K10.
+
+
+4. PER PERSON
+-------------
+Urvashi (engine, CLI)
+  The whole pipeline:
+
+    from .parser import parse_file
+    from .metrics import compute_process_metrics, compute_summary
+    from .output import format_a2, write_output
+
+    inp = parse_file(input_path, "A2")
+    result = Simulation(inp, scheduler, allocator, mode="A2").run()
+    metrics = compute_process_metrics(result.readers)
+    summary = compute_summary(metrics)
+    write_output(output_path, format_a2(metrics, summary, result.pool))
+
+  - Build each Reader as Reader(spec, actions=inp.actions_for(spec.id)).
+  - Push READY readers with ready_queue.push(reader.spec).
+  - Set mem_admit = arrival only once admission really happens (M = t).
+  - K10 is waiting for you: tests/integration/test_engine_vs_a1.py turns on
+    as soon as engine.py and memory.py exist. It calls
+        simulate(inp, scheduler, Allocator.FIRST_FIT, "A2", pool_capacity=10**6)
+    and expects the same START/COMPLETION as the A1 port on 211 inputs. I
+    checked that a minimal event loop following the A2 event order (with
+    my ReadyQueue) matches the A1 port on 10,000 random runs, so if yours
+    differs, look at your event order first.
+
+Aarush (memory, experiments)
+  - Request sizes come from spec.space_req (already validated to be 1..6).
+  - Allocator("BEST_FIT") turns a CLI string into the enum.
+  - Your PoolStats needs the exact field names above for output.py
+    (utilization_pct as a @property).
+  - In experiments.py, use compute_summary for every metric in the
+    comparison tables, so the README numbers match the graded output exactly.
+
+Samar (resource parser, resources, deadlock)
+  - parse_resource_sections(lines, start, readers) gets:
+      lines    every input line, with trailing blank lines already
+               removed. Strip fields yourself.
+      start    0-BASED index of the R line. The file line number is
+               index + 1: raise InputError(msg, index + 1).
+      readers  tuple of ReaderSpec in file order (for ID and SERVICE checks)
+    Return (tuple of ResourceSpec, tuple of Action). row_index = position in
+    the K section, starting at 0.
+  - Use STANDARD_RESOURCES for the inventory check, and ActionType("ACQUIRE")
+    to parse the ACTION field.
+  - If you want a strict integer parser, reuse parser.parse_int(text,
+    field, line_no): it rejects "2.5", "1_0" and empty fields.
+  - Your ResourceStats needs the exact field names above for output.py.
+  - tests/contract/test_parser_contract.py already tests the hand-off with
+    a stand-in for your module, so the calling side is fixed.
+
+
+5. NOT DONE YET / WHAT I NEED FROM YOU
+--------------------------------------
+- G5 (README Assumptions / Limitations / Optional features):
+  docs/readme/assumptions_limitations_optional.md has a draft with a TODO
+  for each of you. Add your module's assumptions and limitations there as
+  you go.
+- mypy currently reports 4 errors, all because engine.py, memory.py,
+  resources.py and resource_parser.py don't exist yet. They go away as
+  those modules land.
+- Found a bug in my modules, or need a signature changed? Tell me first.
+  We change library_sim.pyi, then the code, never the other way round.
+
+Assignment_1-OS_Lab_Python/ is the standalone A1 port. Its copies of the
+shared modules are identical to src/library_sim/. If you change any of
+those modules, tell me so I can re-sync and re-run the A1 regression.
+
+Kabir

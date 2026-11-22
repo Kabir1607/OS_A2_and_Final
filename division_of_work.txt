@@ -30,6 +30,11 @@ Modules: errors.py, models.py, scheduler.py, a1.py, parser.py, metrics.py, outpu
 (Everyone imports these first, so they're the critical path. Push models.py
 and errors.py on day 1, even before the logic is finished.)
 
+STATUS (Kabir): K1-K9, K10b and K11 are DONE in src/library_sim/ + tests/contract/,
+and a G5 draft is in docs/readme/. K10 is written
+(tests/integration/test_engine_vs_a1.py) and activates when engine.py +
+memory.py exist. See DEVELOPMENT.md.
+
 K1. errors.py: InputError(message, line_no), UsageError.
 K2. models.py: constants (NUM_LIBRARIANS, SEAT_CAPACITY, STANDARD_RESOURCES),
     State + LEGAL_TRANSITIONS, Scheduler/Allocator/ActionType enums,
