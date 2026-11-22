@@ -31,8 +31,8 @@
   (WORK_OFFSET, row order). The spec already requires non-decreasing
   offsets per reader, so valid inputs are unaffected.
 - **Deadlock prevention:** ROLLBACK and ORDERED are both implemented. The
-  default is chosen from measurements (TODO Samar/Aarush: fill in the
-  choice and the reason).
+  default is ROLLBACK, ensuring held_while_waiting == 0 and eliminating convoys
+  when readers hold shared books during extended reading periods.
 - **ORDERED** grants a free book in any order and only enforces the order
   when a reader would have to *wait*. That is enough to rule out circular
   wait.
@@ -47,7 +47,11 @@
   be strict integers.
 - TODO Aarush: allocator and admission assumptions.
 - TODO Urvashi: engine assumptions.
-- TODO Samar: synchronization, fairness and worker-model assumptions.
+- **Synchronization and worker-model (Samar):**
+  - Worker threads run under real OS threads (ThreadPoolExecutor); all resource mutations are locked inside ResourceManager with atomic check-and-update.
+  - Process lifecycle transitions remain confined strictly to the coordinator thread, keeping state changes completely race-free.
+  - Waiters per resource are resolved in strict FIFO order via direct handoff on release, avoiding lost wake-ups and stealing.
+  - Code avoids any reliance on GIL atomicity, making it thread-safe on free-threaded Python builds.
 
 ### Not applicable to the Library
 The Final spec (section 11) asks for tests involving A1 preemption, Round
