@@ -39,25 +39,37 @@ One simulator for the **Smart Library** scenario, built in three stages:
 | `a1.py` (A1 port, byte-identical to the C++ output) | Kabir | ✅ done |
 | `parser.py` (A2/Final process section + validation) | Kabir | ✅ done (Final-mode hand-off waits for `resource_parser.py`) |
 | `metrics.py`, `output.py` (A1, A2 and Final formats) | Kabir | ✅ done |
-| `memory.py` (seats, allocators, FIFO admission, occupancy) | Aarush | ⬜ not started |
+| `memory.py` (seats, allocators, FIFO admission, occupancy) | Aarush | ✅ done |
 | `experiments.py` (allocator + policy comparisons) | Aarush | ⬜ not started |
-| `engine.py`, `cli.py`, packaging | Urvashi | ⬜ not started |
+| `engine.py` (A2 loop + resource-free Final) | Urvashi | ✅ done; the Final loop with resources is written but waits for Samar's modules |
+| `cli.py` (`a2_main`, `final_main`, `--demo-deadlock`) | Urvashi | ✅ A2 and resource-free Final work; `--policy`, `--trace`, `--demo-deadlock` and inputs with resources wait for Samar's modules |
+| `build_packages.py` (the two zips) | Urvashi | ✅ builds `dist/a2.zip` + `dist/final.zip` and runs each from a clean folder |
 | `resource_parser.py`, `trace.py`, `resources.py`, `workers.py`, `deadlock.py` | Samar | ⬜ not started |
 
-**Tests today:** 45 tests pass on Python 3.10 and 3.14. One is skipped: the
-engine-vs-A1 cross-check (K10), which switches on once `engine.py` and
-`memory.py` exist.
+**Tests today:** 76 tests pass on Python 3.10 and 3.14, none skipped. They
+include the engine-vs-A1 cross-check (K10: 211 inputs x 2 schedulers) and
+the "resource-free Final = A2" check. `mypy --strict` only reports the
+missing modules from Samar.
 
 **What you can run today:**
 
 ```bash
+# A1 (standalone Python port)
 cd Assignment_1-OS_Lab_Python
-python3 main.py input.txt FCFS          # A1 simulator (Python port)
-python3 main.py input.txt PRIORITY
+python3 main.py input.txt FCFS          # or PRIORITY
 python3 tests/run_tests.py              # A1 regression: 20/20 vs the C++ expected outputs
+cd ..
+
+# A2 and Final, from the repo root (the zips get their own main.py)
+PYTHONPATH=src python3 -c 'import sys; from library_sim.cli import a2_main; raise SystemExit(a2_main(sys.argv[1:]))' INPUT FCFS FIRST_FIT OUTPUT
+PYTHONPATH=src python3 -c 'import sys; from library_sim.cli import final_main; raise SystemExit(final_main(sys.argv[1:]))' INPUT FCFS FIRST_FIT OUTPUT --stats
+
+# Build both submissions into dist/ (git-ignored) and smoke-test them
+python3 build_packages.py
 ```
 
-There is no A2 or Final command line yet. That is `cli.py` (Urvashi, U7).
+Final runs on inputs **with** resources, `--policy`, `--trace` and
+`--demo-deadlock` stop with a clean `Error:` message until Samar's modules exist.
 
 ## 3. Where everything is
 

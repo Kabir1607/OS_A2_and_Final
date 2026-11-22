@@ -7,13 +7,17 @@ The two public functions return process-style exit codes instead of calling
 
 from __future__ import annotations
 
+import dataclasses
 import sys
-from pathlib import Path
 from time import perf_counter
-from typing import Sequence, TextIO
+from typing import TYPE_CHECKING, Sequence, TextIO
 
 from .errors import InputError, UsageError
 from .models import Allocator, Scheduler
+
+if TYPE_CHECKING:  # Final-only modules are imported lazily at run time.
+    from .deadlock import PreventionPolicy
+    from .trace import Tracer
 
 
 def _error(exc: Exception) -> int:
@@ -107,22 +111,25 @@ def final_main(argv: Sequence[str]) -> int:
     started = perf_counter()
     try:
         scheduler, allocator = _enums(scheduler_text, allocator_text)
-        from .deadlock import PreventionPolicy
         from .engine import simulate
         from .metrics import compute_process_metrics, compute_summary
         from .output import format_final, write_output
         from .parser import parse_file
-        from .trace import Tracer
 
-        policy = None
+        # deadlock/trace are imported only when an option needs them, so a
+        # resource-free Final run works on the A2 modules alone.
+        policy: PreventionPolicy | None = None
         if policy_text is not None:
+            from .deadlock import PreventionPolicy
             try:
                 policy = PreventionPolicy(policy_text)
             except ValueError as exc:
                 raise UsageError("policy must be ROLLBACK or ORDERED") from exc
+        tracer: Tracer | None = None
         if trace_path is not None:
+            from .trace import Tracer
             sink, close_sink = _open_trace(trace_path)
-        tracer = Tracer(sink=sink, enabled=trace_path is not None)
+            tracer = Tracer(sink=sink, enabled=True)
         result = simulate(
             parse_file(input_path, "FINAL"),
             scheduler,
@@ -140,15 +147,39 @@ def final_main(argv: Sequence[str]) -> int:
                          result.resources, result.checks),
         )
         if stats and not quiet:
-            print(f"wall_time_s={perf_counter() - started:.6f}", file=sys.stderr)
+            _print_stats(result.policy_stats, result.wall_time_s, perf_counter() - started)
         if result.incomplete:
+            print(
+                "Error: run finished with unfinished readers: "
+                + ", ".join(result.incomplete)
+                + (f" (deadlock cycles: {len(result.deadlock_cycles)})"
+                   if result.deadlock_cycles else ""),
+                file=sys.stderr,
+            )
             return 2
         return 0
+    except ImportError as exc:
+        # e.g. a Final-only module missing from this build: report, no traceback.
+        return _error(exc)
     except (InputError, UsageError, OSError, ValueError, AssertionError) as exc:
         return _error(exc)
     finally:
         if close_sink and sink is not None:
             sink.close()
+
+
+def _print_stats(policy_stats: object | None, sim_s: float, total_s: float) -> None:
+    """--stats: PolicyStats fields and wall times on stderr, never in OUTPUT_FILE."""
+    if policy_stats is None:
+        print("policy=none (resource-free run)", file=sys.stderr)
+    elif dataclasses.is_dataclass(policy_stats) and not isinstance(policy_stats, type):
+        for field in dataclasses.fields(policy_stats):
+            value = getattr(policy_stats, field.name)
+            print(f"{field.name}={getattr(value, 'value', value)}", file=sys.stderr)
+    else:
+        print(f"policy_stats={policy_stats!r}", file=sys.stderr)
+    print(f"simulation_wall_time_s={sim_s:.6f}", file=sys.stderr)
+    print(f"wall_time_s={total_s:.6f}", file=sys.stderr)
 
 
 def _demo_deadlock(argv: Sequence[str]) -> int:
@@ -190,5 +221,7 @@ def _demo_deadlock(argv: Sequence[str]) -> int:
                 f"completed={','.join(report.completed)}"
             )
         return 0
+    except ImportError as exc:
+        return _error(exc)
     except (InputError, UsageError, OSError, ValueError) as exc:
         return _error(exc)

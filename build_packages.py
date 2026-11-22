@@ -36,7 +36,7 @@ def _main(mode: str) -> str:
 
 def _stage(mode: str, directory: Path) -> None:
     package = directory / "library_sim"
-    package.mkdir()
+    package.mkdir(parents=True)
     for source in SRC.glob("*.py"):
         if mode == "A2" and source.name in FINAL_ONLY:
             continue
@@ -53,6 +53,22 @@ def _zip_stage(stage: Path, archive: Path) -> None:
         for path in stage.rglob("*"):
             if path.is_file():
                 output.write(path, path.relative_to(stage))
+
+
+SMOKE_INPUT = "2\n2\nR1,0,1,3,REGULAR,4,0\nR2,1,2,2,REGULAR,3,0\n"
+
+
+def _smoke_run(smoke: Path, mode: str) -> None:
+    """Run the unzipped main.py on a tiny resource-free input, as a grader would."""
+    (smoke / "smoke_input.txt").write_text(SMOKE_INPUT, encoding="utf-8")
+    subprocess.run(
+        ["python3", "main.py", "smoke_input.txt", "FCFS", "FIRST_FIT", "smoke_output.txt"],
+        cwd=smoke,
+        check=True,
+    )
+    output = (smoke / "smoke_output.txt").read_text(encoding="utf-8")
+    if not output.startswith("PROCESS,R1,") or ("CHECK," in output) != (mode == "FINAL"):
+        raise SystemExit(f"{mode} smoke run produced unexpected output:\n{output}")
 
 
 def main() -> int:
@@ -82,6 +98,7 @@ def main() -> int:
                 check=True,
                 env={"PYTHONPATH": str(smoke)},
             )
+            _smoke_run(smoke, mode)
     print(f"built {DIST / 'a2.zip'} and {DIST / 'final.zip'}")
     return 0
 

@@ -57,10 +57,8 @@ None of these need fakes, because the real modules are done. Use them directly.
 
 ## Waiting on other owners
 
-- `tests/integration/test_engine_vs_a1.py` (K10) activates once `engine.py`
-  and `memory.py` exist. With `pool_capacity=10**6`, `simulate(..., "A2")` must
-  give the same START/COMPLETION as the A1 port on all 11 A1 inputs plus
-  200 random ones. A minimal event loop following the A2 event order (with
-  `ReadyQueue`) was checked against the A1 port on 10,000 random runs: an
-  engine that follows the A2 event order can match it exactly.
+- `tests/integration/test_engine_vs_a1.py` (K10) is active and passing:
+  with a seat pool big enough that nobody waits for memory,
+  `simulate(..., "A2")` gives the same START/COMPLETION as the A1 port on
+  all 11 A1 inputs plus 200 random ones.
 - `parser` in FINAL mode needs Samar's `resource_parser.py`.

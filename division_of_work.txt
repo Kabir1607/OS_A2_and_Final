@@ -30,10 +30,9 @@ Modules: errors.py, models.py, scheduler.py, a1.py, parser.py, metrics.py, outpu
 (Everyone imports these first, so they're the critical path. Push models.py
 and errors.py on day 1, even before the logic is finished.)
 
-STATUS (Kabir): K1-K9, K10b and K11 are DONE in src/library_sim/ + tests/contract/,
-and a G5 draft is in docs/readme/. K10 is written
-(tests/integration/test_engine_vs_a1.py) and activates when engine.py +
-memory.py exist. See DEVELOPMENT.md.
+STATUS (Kabir): K1-K11 and K10b are DONE in src/library_sim/ + tests/. K10
+(tests/integration/test_engine_vs_a1.py) is active and passes against the
+real engine + memory. A G5 draft is in docs/readme/. See DEVELOPMENT.md.
 
 K1. errors.py: InputError(message, line_no), UsageError.
 K2. models.py: constants (NUM_LIBRARIANS, SEAT_CAPACITY, STANDARD_RESOURCES),
@@ -45,7 +44,8 @@ K3. scheduler.py: fcfs_key, priority_key, key_for, heap-based ReadyQueue
 K4. a1.py: faithful port of the C++ A1 (read_a1_input, fcfs,
     priority_schedule, a1_main). Librarian 0 wins ties.
 K5. A1 regression: a test that runs all 10 tests/inputs x {FCFS, PRIORITY}
-    and diffs byte-for-byte against Assignment_1-OS_Lab_C++/tests/expected/*.out.
+    and diffs byte-for-byte against the C++ expected outputs (*.out; the
+    test reads the identical copies in Assignment_1-OS_Lab_Python/tests/).
     Also port run_tests.sh to Python.
 K6. parser.py: parse_text / parse_file / parse_reader_row for the N, Q and
     7-field reader section, with all A2 validation (see .pyi docstring), A2
@@ -61,7 +61,7 @@ K8. metrics.py: compute_process_metrics (incl. the identity
 K9. output.py: fmt_decimal (4 dp), format_a1 (6 dp, identical to C++),
     format_a2, format_final (RESOURCE + CHECK lines), write_output.
     Golden-string tests for each format.
-K10. Cross-check with Urvashi: Simulation(pool_capacity=10**6) on every A1
+K10. Cross-check with Urvashi: Simulation(pool_capacity=sum of SPACE_REQ) on every A1
     input (SPACE_REQ=1) gives the same START/COMPLETION as the A1 port.
 K10b. Publish fakes + contract tests for models/scheduler/parser/metrics/output
     first (everyone depends on these).

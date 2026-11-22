@@ -127,13 +127,12 @@ Urvashi (engine, CLI)
   - Build each Reader as Reader(spec, actions=inp.actions_for(spec.id)).
   - Push READY readers with ready_queue.push(reader.spec).
   - Set mem_admit = arrival only once admission really happens (M = t).
-  - K10 is waiting for you: tests/integration/test_engine_vs_a1.py turns on
-    as soon as engine.py and memory.py exist. It calls
-        simulate(inp, scheduler, Allocator.FIRST_FIT, "A2", pool_capacity=10**6)
-    and expects the same START/COMPLETION as the A1 port on 211 inputs. I
-    checked that a minimal event loop following the A2 event order (with
-    my ReadyQueue) matches the A1 port on 10,000 random runs, so if yours
-    differs, look at your event order first.
+  - K10 is now active and PASSES: tests/integration/test_engine_vs_a1.py
+    calls simulate(inp, scheduler, Allocator.FIRST_FIT, "A2",
+    pool_capacity=<sum of all seat requests>) (so no reader ever waits for
+    a seat) and gets the same START/COMPLETION as the A1 port on 211
+    inputs. If a later engine change breaks it, look at the event order
+    first.
 
 Aarush (memory, experiments)
   - Request sizes come from spec.space_req (already validated to be 1..6).
@@ -167,8 +166,8 @@ Samar (resource parser, resources, deadlock)
   docs/readme/assumptions_limitations_optional.md has a draft with a TODO
   for each of you. Add your module's assumptions and limitations there as
   you go.
-- mypy currently reports 4 errors, all because engine.py, memory.py,
-  resources.py and resource_parser.py don't exist yet. They go away as
+- mypy --strict now only reports modules that don't exist yet (Samar's
+  resource_parser, trace, resources, workers, deadlock). They go away as
   those modules land.
 - Found a bug in my modules, or need a signature changed? Tell me first.
   We change library_sim.pyi, then the code, never the other way round.

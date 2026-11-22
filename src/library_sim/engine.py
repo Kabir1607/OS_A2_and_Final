@@ -10,13 +10,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from time import perf_counter
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from .models import Allocator, Reader, ReaderResult, Scheduler, SimulationInput, State
+from .scheduler import ReadyQueue
 
 if TYPE_CHECKING:  # Final-only imports remain lazy at runtime.
-    from .deadlock import PreventionPolicy
-    from .trace import Tracer
+    from .deadlock import PolicyStats, PreventionPolicy
+    from .memory import PoolStats
+    from .resources import ResourceManager, ResourceStats
+    from .trace import TraceEvent, Tracer
+    from .workers import WorkerPool
 
 
 @dataclass(frozen=True)
@@ -34,12 +38,12 @@ class SimulationResult:
 
     readers: tuple[ReaderResult, ...]
     incomplete: tuple[str, ...]
-    pool: object
-    resources: tuple[object, ...]
+    pool: PoolStats
+    resources: tuple[ResourceStats, ...]
     checks: CheckStats | None
     deadlock_cycles: tuple[tuple[str, ...], ...]
-    trace: tuple[object, ...]
-    policy_stats: object | None
+    trace: tuple[TraceEvent, ...]
+    policy_stats: PolicyStats | None
     wall_time_s: float
 
 
@@ -89,6 +93,13 @@ class Simulation:
             spec.id: Reader(spec, actions=inp.actions_for(spec.id))
             for spec in inp.readers
         }
+        # Per-run state; run() resets it.
+        self.started_at = 0.0
+        self.running: dict[int, Reader] = {}
+        self.completed: set[str] = set()
+        self.ready = ReadyQueue(scheduler)
+        self.manager: ResourceManager | None = None
+        self.worker_pool: WorkerPool | None = None
 
     def _emit(self, t: int, kind: str, reader_id: str,
               resource_id: str | None = None, detail: str = "") -> None:
@@ -162,11 +173,12 @@ class Simulation:
 
     def _finish(self, end_time: int, cycles: list[tuple[str, ...]]) -> SimulationResult:
         """Finalize collaborators and preserve incomplete-reader information."""
-        resources: tuple[object, ...] = ()
+        resources: tuple[ResourceStats, ...] = ()
         checks: CheckStats | None = None
-        policy_stats: object | None = None
-        trace: tuple[object, ...] = ()
+        policy_stats: PolicyStats | None = None
+        trace: tuple[TraceEvent, ...] = ()
         if self.manager is not None:
+            assert self.worker_pool is not None and self.tracer is not None
             self.worker_pool.shutdown()
             resources = tuple(self.manager.stats())
             policy_stats = self.manager.policy_stats()
@@ -186,6 +198,7 @@ class Simulation:
             # still requires its three CHECK lines.
             checks = CheckStats(0, len(cycles), len(self.completed))
 
+        self._check_end_invariants(cycles)
         pool = self.occupancy.finish(end_time)
         return SimulationResult(
             tuple(self._result_for(self.readers[key]) for key in sorted(self.completed)),
@@ -201,6 +214,35 @@ class Simulation:
             policy_stats,
             perf_counter() - self.started_at,
         )
+
+    def _check_end_invariants(self, cycles: list[tuple[str, ...]]) -> None:
+        """U6: a run in which every reader finished must leave nothing behind.
+
+        Uses explicit raises (not ``assert``) so ``python3 -O`` keeps them.
+        Skipped when readers are left over (deadlock or a collaborator bug):
+        then seats and books are legitimately still held, and the caller
+        reports ``incomplete`` instead.
+        """
+        unfinished = [r.id for r in self.readers.values() if r.state is not State.TERMINATED]
+        if unfinished or cycles:
+            return
+        problems: list[str] = []
+        if self.pool.occupied != 0:
+            problems.append(f"{self.pool.occupied} seats still occupied")
+        if len(self.admissions) != 0:
+            problems.append("admission queue not empty")
+        if self.ready:
+            problems.append("ready queue not empty")
+        if self.running:
+            problems.append("a librarian is still busy")
+        if self.manager is not None and not self.manager.nothing_held():
+            problems.append("resources still held")
+        for reader in self.readers.values():
+            a, m, s, c = reader.spec.arrival, reader.mem_admit, reader.start, reader.completion
+            if m is None or s is None or c is None or not a <= m <= s <= c:
+                problems.append(f"{reader.id} violates A <= M <= S <= C")
+        if problems:
+            raise AssertionError("end-of-run invariant failed: " + "; ".join(problems))
 
     def _run_a2(self) -> SimulationResult:
         """Execute the A2 event loop using integer virtual time only."""
@@ -307,6 +349,7 @@ class Simulation:
         if not batches:
             return False
 
+        assert self.worker_pool is not None
         results = self.worker_pool.run_batches(batches)
         woken: set[str] = set()
         # Apply every blocked/done result before processing any wake-up.
@@ -399,6 +442,7 @@ class Simulation:
             if not future:
                 from .deadlock import find_cycles
 
+                assert self.manager is not None
                 found = find_cycles(self.manager.wait_for_graph())
                 cycles.extend(tuple(sorted(cycle)) for cycle in found)
                 for cycle in found:
@@ -411,14 +455,11 @@ class Simulation:
     def run(self) -> SimulationResult:
         """Run A2, or the resource-free Final baseline."""
         self.started_at = perf_counter()
-        self.running: dict[int, Reader] = {}
-        self.completed: set[str] = set()
-        self.ready = None
+        self.running = {}
+        self.completed = set()
+        self.ready = ReadyQueue(self.scheduler)
         self.manager = None
         self.worker_pool = None
-        from .scheduler import ReadyQueue
-
-        self.ready = ReadyQueue(self.scheduler)
         if self.mode == "FINAL" and (self.inp.resources or self.inp.actions):
             self._prepare_final()
             return self._run_final()
@@ -433,4 +474,6 @@ def simulate(
     **kwargs: object,
 ) -> SimulationResult:
     """Convenience function matching the public contract."""
-    return Simulation(inp, scheduler, allocator, mode=mode, **kwargs).run()
+    # The .pyi keeps **kwargs: object; Simulation checks the real types.
+    return Simulation(inp, scheduler, allocator, mode=mode,
+                      **cast("dict[str, Any]", kwargs)).run()

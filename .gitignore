@@ -1,1 +1,4 @@
 context.md
+__pycache__/
+*.pyc
+dist/
