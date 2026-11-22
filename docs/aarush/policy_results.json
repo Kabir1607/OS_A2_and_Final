@@ -1,0 +1,1666 @@
+{
+  "python": "3.12.3",
+  "repeats": 30,
+  "allocator": "FIRST_FIT",
+  "instrumentation": "in-memory trace replay, real workers, barrier-coordinated waves",
+  "p6_seed": 3710,
+  "default_policy": "ROLLBACK",
+  "rows": [
+    {
+      "input_name": "p1_in_order_low_contention.txt",
+      "scheduler": "FCFS",
+      "allocator": "FIRST_FIT",
+      "policy": "ROLLBACK",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 2.5,
+        "min": 2.5,
+        "max": 2.5
+      },
+      "average_turnaround": {
+        "mean": 8.5,
+        "min": 8.5,
+        "max": 8.5
+      },
+      "throughput": {
+        "mean": 0.18181818181818182,
+        "min": 0.18181818181818182,
+        "max": 0.18181818181818182
+      },
+      "service_utilization_pct": {
+        "mean": 54.54545454545454,
+        "min": 54.54545454545454,
+        "max": 54.54545454545454
+      },
+      "total_resource_wait": {
+        "mean": 5.0,
+        "min": 5,
+        "max": 5
+      },
+      "max_resource_wait": {
+        "mean": 5.0,
+        "min": 5,
+        "max": 5
+      },
+      "acquisitions": {
+        "mean": 4.0,
+        "min": 4,
+        "max": 4
+      },
+      "wait_events": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "rollbacks": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "resources_rolled_back": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0015128041663653373,
+        "min": 0.0007116429987945594,
+        "max": 0.01454044599813642
+      }
+    },
+    {
+      "input_name": "p1_in_order_low_contention.txt",
+      "scheduler": "FCFS",
+      "allocator": "FIRST_FIT",
+      "policy": "ORDERED",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 2.5,
+        "min": 2.5,
+        "max": 2.5
+      },
+      "average_turnaround": {
+        "mean": 8.5,
+        "min": 8.5,
+        "max": 8.5
+      },
+      "throughput": {
+        "mean": 0.18181818181818182,
+        "min": 0.18181818181818182,
+        "max": 0.18181818181818182
+      },
+      "service_utilization_pct": {
+        "mean": 54.54545454545454,
+        "min": 54.54545454545454,
+        "max": 54.54545454545454
+      },
+      "total_resource_wait": {
+        "mean": 5.0,
+        "min": 5,
+        "max": 5
+      },
+      "max_resource_wait": {
+        "mean": 5.0,
+        "min": 5,
+        "max": 5
+      },
+      "acquisitions": {
+        "mean": 4.0,
+        "min": 4,
+        "max": 4
+      },
+      "wait_events": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "rollbacks": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "resources_rolled_back": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0010965163336853342,
+        "min": 0.0007545019980170764,
+        "max": 0.0019051400013267994
+      }
+    },
+    {
+      "input_name": "p1_in_order_low_contention.txt",
+      "scheduler": "PRIORITY",
+      "allocator": "FIRST_FIT",
+      "policy": "ROLLBACK",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 2.5,
+        "min": 2.5,
+        "max": 2.5
+      },
+      "average_turnaround": {
+        "mean": 8.5,
+        "min": 8.5,
+        "max": 8.5
+      },
+      "throughput": {
+        "mean": 0.18181818181818182,
+        "min": 0.18181818181818182,
+        "max": 0.18181818181818182
+      },
+      "service_utilization_pct": {
+        "mean": 54.54545454545454,
+        "min": 54.54545454545454,
+        "max": 54.54545454545454
+      },
+      "total_resource_wait": {
+        "mean": 5.0,
+        "min": 5,
+        "max": 5
+      },
+      "max_resource_wait": {
+        "mean": 5.0,
+        "min": 5,
+        "max": 5
+      },
+      "acquisitions": {
+        "mean": 4.0,
+        "min": 4,
+        "max": 4
+      },
+      "wait_events": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "rollbacks": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "resources_rolled_back": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0010197166661479666,
+        "min": 0.0007098889982444234,
+        "max": 0.0017822619993239641
+      }
+    },
+    {
+      "input_name": "p1_in_order_low_contention.txt",
+      "scheduler": "PRIORITY",
+      "allocator": "FIRST_FIT",
+      "policy": "ORDERED",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 2.5,
+        "min": 2.5,
+        "max": 2.5
+      },
+      "average_turnaround": {
+        "mean": 8.5,
+        "min": 8.5,
+        "max": 8.5
+      },
+      "throughput": {
+        "mean": 0.18181818181818182,
+        "min": 0.18181818181818182,
+        "max": 0.18181818181818182
+      },
+      "service_utilization_pct": {
+        "mean": 54.54545454545454,
+        "min": 54.54545454545454,
+        "max": 54.54545454545454
+      },
+      "total_resource_wait": {
+        "mean": 5.0,
+        "min": 5,
+        "max": 5
+      },
+      "max_resource_wait": {
+        "mean": 5.0,
+        "min": 5,
+        "max": 5
+      },
+      "acquisitions": {
+        "mean": 4.0,
+        "min": 4,
+        "max": 4
+      },
+      "wait_events": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "rollbacks": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "resources_rolled_back": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0010721938330486107,
+        "min": 0.000725767997209914,
+        "max": 0.0015680739961680956
+      }
+    },
+    {
+      "input_name": "p2_in_order_high_contention.txt",
+      "scheduler": "FCFS",
+      "allocator": "FIRST_FIT",
+      "policy": "ROLLBACK",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 7.666666666666667,
+        "min": 7.666666666666667,
+        "max": 7.666666666666667
+      },
+      "average_turnaround": {
+        "mean": 17.666666666666668,
+        "min": 17.666666666666668,
+        "max": 17.666666666666668
+      },
+      "throughput": {
+        "mean": 0.11999999999999998,
+        "min": 0.12,
+        "max": 0.12
+      },
+      "service_utilization_pct": {
+        "mean": 60.0,
+        "min": 60.0,
+        "max": 60.0
+      },
+      "total_resource_wait": {
+        "mean": 20.0,
+        "min": 20,
+        "max": 20
+      },
+      "max_resource_wait": {
+        "mean": 13.0,
+        "min": 13,
+        "max": 13
+      },
+      "acquisitions": {
+        "mean": 8.0,
+        "min": 8,
+        "max": 8
+      },
+      "wait_events": {
+        "mean": 3.0,
+        "min": 3,
+        "max": 3
+      },
+      "rollbacks": {
+        "mean": 2.0,
+        "min": 2,
+        "max": 2
+      },
+      "resources_rolled_back": {
+        "mean": 2.0,
+        "min": 2,
+        "max": 2
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0014292052335804328,
+        "min": 0.000988446998235304,
+        "max": 0.002057974001218099
+      }
+    },
+    {
+      "input_name": "p2_in_order_high_contention.txt",
+      "scheduler": "FCFS",
+      "allocator": "FIRST_FIT",
+      "policy": "ORDERED",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 7.666666666666667,
+        "min": 7.666666666666667,
+        "max": 7.666666666666667
+      },
+      "average_turnaround": {
+        "mean": 17.666666666666668,
+        "min": 17.666666666666668,
+        "max": 17.666666666666668
+      },
+      "throughput": {
+        "mean": 0.11999999999999998,
+        "min": 0.12,
+        "max": 0.12
+      },
+      "service_utilization_pct": {
+        "mean": 60.0,
+        "min": 60.0,
+        "max": 60.0
+      },
+      "total_resource_wait": {
+        "mean": 20.0,
+        "min": 20,
+        "max": 20
+      },
+      "max_resource_wait": {
+        "mean": 13.0,
+        "min": 13,
+        "max": 13
+      },
+      "acquisitions": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "wait_events": {
+        "mean": 3.0,
+        "min": 3,
+        "max": 3
+      },
+      "rollbacks": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "resources_rolled_back": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "held_while_waiting": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "wall_time_s": {
+        "mean": 0.0012896469335828443,
+        "min": 0.000992403998679947,
+        "max": 0.002072440998745151
+      }
+    },
+    {
+      "input_name": "p2_in_order_high_contention.txt",
+      "scheduler": "PRIORITY",
+      "allocator": "FIRST_FIT",
+      "policy": "ROLLBACK",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 7.666666666666667,
+        "min": 7.666666666666667,
+        "max": 7.666666666666667
+      },
+      "average_turnaround": {
+        "mean": 17.666666666666668,
+        "min": 17.666666666666668,
+        "max": 17.666666666666668
+      },
+      "throughput": {
+        "mean": 0.11999999999999998,
+        "min": 0.12,
+        "max": 0.12
+      },
+      "service_utilization_pct": {
+        "mean": 60.0,
+        "min": 60.0,
+        "max": 60.0
+      },
+      "total_resource_wait": {
+        "mean": 20.0,
+        "min": 20,
+        "max": 20
+      },
+      "max_resource_wait": {
+        "mean": 13.0,
+        "min": 13,
+        "max": 13
+      },
+      "acquisitions": {
+        "mean": 8.0,
+        "min": 8,
+        "max": 8
+      },
+      "wait_events": {
+        "mean": 3.0,
+        "min": 3,
+        "max": 3
+      },
+      "rollbacks": {
+        "mean": 2.0,
+        "min": 2,
+        "max": 2
+      },
+      "resources_rolled_back": {
+        "mean": 2.0,
+        "min": 2,
+        "max": 2
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0014940122666303069,
+        "min": 0.001057565001246985,
+        "max": 0.0020741339976666495
+      }
+    },
+    {
+      "input_name": "p2_in_order_high_contention.txt",
+      "scheduler": "PRIORITY",
+      "allocator": "FIRST_FIT",
+      "policy": "ORDERED",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 7.666666666666667,
+        "min": 7.666666666666667,
+        "max": 7.666666666666667
+      },
+      "average_turnaround": {
+        "mean": 17.666666666666668,
+        "min": 17.666666666666668,
+        "max": 17.666666666666668
+      },
+      "throughput": {
+        "mean": 0.11999999999999998,
+        "min": 0.12,
+        "max": 0.12
+      },
+      "service_utilization_pct": {
+        "mean": 60.0,
+        "min": 60.0,
+        "max": 60.0
+      },
+      "total_resource_wait": {
+        "mean": 20.0,
+        "min": 20,
+        "max": 20
+      },
+      "max_resource_wait": {
+        "mean": 13.0,
+        "min": 13,
+        "max": 13
+      },
+      "acquisitions": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "wait_events": {
+        "mean": 3.0,
+        "min": 3,
+        "max": 3
+      },
+      "rollbacks": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "resources_rolled_back": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "held_while_waiting": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "wall_time_s": {
+        "mean": 0.0013977136004541535,
+        "min": 0.000993125002423767,
+        "max": 0.0021524290059460327
+      }
+    },
+    {
+      "input_name": "p3_reversed_circular.txt",
+      "scheduler": "FCFS",
+      "allocator": "FIRST_FIT",
+      "policy": "ROLLBACK",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 3.6666666666666665,
+        "min": 3.6666666666666665,
+        "max": 3.6666666666666665
+      },
+      "average_turnaround": {
+        "mean": 9.666666666666666,
+        "min": 9.666666666666666,
+        "max": 9.666666666666666
+      },
+      "throughput": {
+        "mean": 0.23076923076923078,
+        "min": 0.23076923076923078,
+        "max": 0.23076923076923078
+      },
+      "service_utilization_pct": {
+        "mean": 69.23076923076923,
+        "min": 69.23076923076923,
+        "max": 69.23076923076923
+      },
+      "total_resource_wait": {
+        "mean": 10.0,
+        "min": 10,
+        "max": 10
+      },
+      "max_resource_wait": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "acquisitions": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "wait_events": {
+        "mean": 2.0,
+        "min": 2,
+        "max": 2
+      },
+      "rollbacks": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "resources_rolled_back": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0014326775664812886,
+        "min": 0.0009694609980215319,
+        "max": 0.0020215259937685914
+      }
+    },
+    {
+      "input_name": "p3_reversed_circular.txt",
+      "scheduler": "FCFS",
+      "allocator": "FIRST_FIT",
+      "policy": "ORDERED",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 4.0,
+        "min": 4.0,
+        "max": 4.0
+      },
+      "average_turnaround": {
+        "mean": 10.0,
+        "min": 10.0,
+        "max": 10.0
+      },
+      "throughput": {
+        "mean": 0.21428571428571427,
+        "min": 0.21428571428571427,
+        "max": 0.21428571428571427
+      },
+      "service_utilization_pct": {
+        "mean": 64.28571428571429,
+        "min": 64.28571428571429,
+        "max": 64.28571428571429
+      },
+      "total_resource_wait": {
+        "mean": 11.0,
+        "min": 11,
+        "max": 11
+      },
+      "max_resource_wait": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "acquisitions": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "wait_events": {
+        "mean": 3.0,
+        "min": 3,
+        "max": 3
+      },
+      "rollbacks": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "resources_rolled_back": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "held_while_waiting": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "wall_time_s": {
+        "mean": 0.0014378194997940834,
+        "min": 0.0009320320023107342,
+        "max": 0.00241031899349764
+      }
+    },
+    {
+      "input_name": "p3_reversed_circular.txt",
+      "scheduler": "PRIORITY",
+      "allocator": "FIRST_FIT",
+      "policy": "ROLLBACK",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 3.6666666666666665,
+        "min": 3.6666666666666665,
+        "max": 3.6666666666666665
+      },
+      "average_turnaround": {
+        "mean": 9.666666666666666,
+        "min": 9.666666666666666,
+        "max": 9.666666666666666
+      },
+      "throughput": {
+        "mean": 0.23076923076923078,
+        "min": 0.23076923076923078,
+        "max": 0.23076923076923078
+      },
+      "service_utilization_pct": {
+        "mean": 69.23076923076923,
+        "min": 69.23076923076923,
+        "max": 69.23076923076923
+      },
+      "total_resource_wait": {
+        "mean": 10.0,
+        "min": 10,
+        "max": 10
+      },
+      "max_resource_wait": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "acquisitions": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "wait_events": {
+        "mean": 2.0,
+        "min": 2,
+        "max": 2
+      },
+      "rollbacks": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "resources_rolled_back": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0013461889672422938,
+        "min": 0.0009821950006880797,
+        "max": 0.0017189639984280802
+      }
+    },
+    {
+      "input_name": "p3_reversed_circular.txt",
+      "scheduler": "PRIORITY",
+      "allocator": "FIRST_FIT",
+      "policy": "ORDERED",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 4.0,
+        "min": 4.0,
+        "max": 4.0
+      },
+      "average_turnaround": {
+        "mean": 10.0,
+        "min": 10.0,
+        "max": 10.0
+      },
+      "throughput": {
+        "mean": 0.21428571428571427,
+        "min": 0.21428571428571427,
+        "max": 0.21428571428571427
+      },
+      "service_utilization_pct": {
+        "mean": 64.28571428571429,
+        "min": 64.28571428571429,
+        "max": 64.28571428571429
+      },
+      "total_resource_wait": {
+        "mean": 11.0,
+        "min": 11,
+        "max": 11
+      },
+      "max_resource_wait": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "acquisitions": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "wait_events": {
+        "mean": 3.0,
+        "min": 3,
+        "max": 3
+      },
+      "rollbacks": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "resources_rolled_back": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "held_while_waiting": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "wall_time_s": {
+        "mean": 0.0014986388329513527,
+        "min": 0.001009746003546752,
+        "max": 0.0018950209996546619
+      }
+    },
+    {
+      "input_name": "p4_out_of_order_uncontended.txt",
+      "scheduler": "FCFS",
+      "allocator": "FIRST_FIT",
+      "policy": "ROLLBACK",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "average_turnaround": {
+        "mean": 6.0,
+        "min": 6.0,
+        "max": 6.0
+      },
+      "throughput": {
+        "mean": 0.2,
+        "min": 0.2,
+        "max": 0.2
+      },
+      "service_utilization_pct": {
+        "mean": 60.0,
+        "min": 60.0,
+        "max": 60.0
+      },
+      "total_resource_wait": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "max_resource_wait": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "acquisitions": {
+        "mean": 4.0,
+        "min": 4,
+        "max": 4
+      },
+      "wait_events": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "rollbacks": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "resources_rolled_back": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0005986416671172871,
+        "min": 0.0005633570035570301,
+        "max": 0.001011738997476641
+      }
+    },
+    {
+      "input_name": "p4_out_of_order_uncontended.txt",
+      "scheduler": "FCFS",
+      "allocator": "FIRST_FIT",
+      "policy": "ORDERED",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "average_turnaround": {
+        "mean": 6.0,
+        "min": 6.0,
+        "max": 6.0
+      },
+      "throughput": {
+        "mean": 0.2,
+        "min": 0.2,
+        "max": 0.2
+      },
+      "service_utilization_pct": {
+        "mean": 60.0,
+        "min": 60.0,
+        "max": 60.0
+      },
+      "total_resource_wait": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "max_resource_wait": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "acquisitions": {
+        "mean": 4.0,
+        "min": 4,
+        "max": 4
+      },
+      "wait_events": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "rollbacks": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "resources_rolled_back": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0007137373671866953,
+        "min": 0.0005794259996036999,
+        "max": 0.0012969800009159371
+      }
+    },
+    {
+      "input_name": "p4_out_of_order_uncontended.txt",
+      "scheduler": "PRIORITY",
+      "allocator": "FIRST_FIT",
+      "policy": "ROLLBACK",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "average_turnaround": {
+        "mean": 6.0,
+        "min": 6.0,
+        "max": 6.0
+      },
+      "throughput": {
+        "mean": 0.2,
+        "min": 0.2,
+        "max": 0.2
+      },
+      "service_utilization_pct": {
+        "mean": 60.0,
+        "min": 60.0,
+        "max": 60.0
+      },
+      "total_resource_wait": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "max_resource_wait": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "acquisitions": {
+        "mean": 4.0,
+        "min": 4,
+        "max": 4
+      },
+      "wait_events": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "rollbacks": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "resources_rolled_back": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0006512112990700795,
+        "min": 0.0005639279988827184,
+        "max": 0.0011065459984820336
+      }
+    },
+    {
+      "input_name": "p4_out_of_order_uncontended.txt",
+      "scheduler": "PRIORITY",
+      "allocator": "FIRST_FIT",
+      "policy": "ORDERED",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "average_turnaround": {
+        "mean": 6.0,
+        "min": 6.0,
+        "max": 6.0
+      },
+      "throughput": {
+        "mean": 0.2,
+        "min": 0.2,
+        "max": 0.2
+      },
+      "service_utilization_pct": {
+        "mean": 60.0,
+        "min": 60.0,
+        "max": 60.0
+      },
+      "total_resource_wait": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "max_resource_wait": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "acquisitions": {
+        "mean": 4.0,
+        "min": 4,
+        "max": 4
+      },
+      "wait_events": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "rollbacks": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "resources_rolled_back": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0006863621665009607,
+        "min": 0.0005694380015484057,
+        "max": 0.001513061004516203
+      }
+    },
+    {
+      "input_name": "p5_multibook_vs_single.txt",
+      "scheduler": "FCFS",
+      "allocator": "FIRST_FIT",
+      "policy": "ROLLBACK",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 2.75,
+        "min": 2.75,
+        "max": 2.75
+      },
+      "average_turnaround": {
+        "mean": 8.25,
+        "min": 8.25,
+        "max": 8.25
+      },
+      "throughput": {
+        "mean": 0.26666666666666666,
+        "min": 0.26666666666666666,
+        "max": 0.26666666666666666
+      },
+      "service_utilization_pct": {
+        "mean": 73.33333333333333,
+        "min": 73.33333333333333,
+        "max": 73.33333333333333
+      },
+      "total_resource_wait": {
+        "mean": 8.0,
+        "min": 8,
+        "max": 8
+      },
+      "max_resource_wait": {
+        "mean": 5.0,
+        "min": 5,
+        "max": 5
+      },
+      "acquisitions": {
+        "mean": 6.0,
+        "min": 6,
+        "max": 6
+      },
+      "wait_events": {
+        "mean": 2.0,
+        "min": 2,
+        "max": 2
+      },
+      "rollbacks": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "resources_rolled_back": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0014788233990354154,
+        "min": 0.0010328990028938279,
+        "max": 0.002443429999402724
+      }
+    },
+    {
+      "input_name": "p5_multibook_vs_single.txt",
+      "scheduler": "FCFS",
+      "allocator": "FIRST_FIT",
+      "policy": "ORDERED",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 2.75,
+        "min": 2.75,
+        "max": 2.75
+      },
+      "average_turnaround": {
+        "mean": 8.25,
+        "min": 8.25,
+        "max": 8.25
+      },
+      "throughput": {
+        "mean": 0.26666666666666666,
+        "min": 0.26666666666666666,
+        "max": 0.26666666666666666
+      },
+      "service_utilization_pct": {
+        "mean": 73.33333333333333,
+        "min": 73.33333333333333,
+        "max": 73.33333333333333
+      },
+      "total_resource_wait": {
+        "mean": 8.0,
+        "min": 8,
+        "max": 8
+      },
+      "max_resource_wait": {
+        "mean": 5.0,
+        "min": 5,
+        "max": 5
+      },
+      "acquisitions": {
+        "mean": 6.0,
+        "min": 6,
+        "max": 6
+      },
+      "wait_events": {
+        "mean": 2.0,
+        "min": 2,
+        "max": 2
+      },
+      "rollbacks": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "resources_rolled_back": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0014471942997867397,
+        "min": 0.0010494500020286068,
+        "max": 0.002048766997177154
+      }
+    },
+    {
+      "input_name": "p5_multibook_vs_single.txt",
+      "scheduler": "PRIORITY",
+      "allocator": "FIRST_FIT",
+      "policy": "ROLLBACK",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 1.5,
+        "min": 1.5,
+        "max": 1.5
+      },
+      "average_turnaround": {
+        "mean": 7.0,
+        "min": 7.0,
+        "max": 7.0
+      },
+      "throughput": {
+        "mean": 0.25,
+        "min": 0.25,
+        "max": 0.25
+      },
+      "service_utilization_pct": {
+        "mean": 68.75,
+        "min": 68.75,
+        "max": 68.75
+      },
+      "total_resource_wait": {
+        "mean": 3.0,
+        "min": 3,
+        "max": 3
+      },
+      "max_resource_wait": {
+        "mean": 3.0,
+        "min": 3,
+        "max": 3
+      },
+      "acquisitions": {
+        "mean": 6.0,
+        "min": 6,
+        "max": 6
+      },
+      "wait_events": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "rollbacks": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "resources_rolled_back": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.0013014468655455857,
+        "min": 0.0009685490003903396,
+        "max": 0.0020697860018117353
+      }
+    },
+    {
+      "input_name": "p5_multibook_vs_single.txt",
+      "scheduler": "PRIORITY",
+      "allocator": "FIRST_FIT",
+      "policy": "ORDERED",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 1.5,
+        "min": 1.5,
+        "max": 1.5
+      },
+      "average_turnaround": {
+        "mean": 7.0,
+        "min": 7.0,
+        "max": 7.0
+      },
+      "throughput": {
+        "mean": 0.25,
+        "min": 0.25,
+        "max": 0.25
+      },
+      "service_utilization_pct": {
+        "mean": 68.75,
+        "min": 68.75,
+        "max": 68.75
+      },
+      "total_resource_wait": {
+        "mean": 3.0,
+        "min": 3,
+        "max": 3
+      },
+      "max_resource_wait": {
+        "mean": 3.0,
+        "min": 3,
+        "max": 3
+      },
+      "acquisitions": {
+        "mean": 6.0,
+        "min": 6,
+        "max": 6
+      },
+      "wait_events": {
+        "mean": 1.0,
+        "min": 1,
+        "max": 1
+      },
+      "rollbacks": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "resources_rolled_back": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.001442788767114204,
+        "min": 0.0010222589990007691,
+        "max": 0.0021968419969198294
+      }
+    },
+    {
+      "input_name": "p6_randomized_stress.txt",
+      "scheduler": "FCFS",
+      "allocator": "FIRST_FIT",
+      "policy": "ROLLBACK",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 19.75,
+        "min": 19.75,
+        "max": 19.75
+      },
+      "average_turnaround": {
+        "mean": 27.75,
+        "min": 27.75,
+        "max": 27.75
+      },
+      "throughput": {
+        "mean": 0.22641509433962265,
+        "min": 0.22641509433962265,
+        "max": 0.22641509433962265
+      },
+      "service_utilization_pct": {
+        "mean": 90.56603773584906,
+        "min": 90.56603773584906,
+        "max": 90.56603773584906
+      },
+      "total_resource_wait": {
+        "mean": 86.0,
+        "min": 86,
+        "max": 86
+      },
+      "max_resource_wait": {
+        "mean": 26.0,
+        "min": 26,
+        "max": 26
+      },
+      "acquisitions": {
+        "mean": 42.0,
+        "min": 42,
+        "max": 42
+      },
+      "wait_events": {
+        "mean": 15.0,
+        "min": 15,
+        "max": 15
+      },
+      "rollbacks": {
+        "mean": 10.0,
+        "min": 10,
+        "max": 10
+      },
+      "resources_rolled_back": {
+        "mean": 12.0,
+        "min": 12,
+        "max": 12
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.005614010900414238,
+        "min": 0.004519757996604312,
+        "max": 0.007304812999791466
+      }
+    },
+    {
+      "input_name": "p6_randomized_stress.txt",
+      "scheduler": "FCFS",
+      "allocator": "FIRST_FIT",
+      "policy": "ORDERED",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 24.916666666666668,
+        "min": 24.916666666666668,
+        "max": 24.916666666666668
+      },
+      "average_turnaround": {
+        "mean": 32.916666666666664,
+        "min": 32.916666666666664,
+        "max": 32.916666666666664
+      },
+      "throughput": {
+        "mean": 0.20689655172413793,
+        "min": 0.20689655172413793,
+        "max": 0.20689655172413793
+      },
+      "service_utilization_pct": {
+        "mean": 82.75862068965517,
+        "min": 82.75862068965517,
+        "max": 82.75862068965517
+      },
+      "total_resource_wait": {
+        "mean": 185.0,
+        "min": 185,
+        "max": 185
+      },
+      "max_resource_wait": {
+        "mean": 49.0,
+        "min": 49,
+        "max": 49
+      },
+      "acquisitions": {
+        "mean": 38.0,
+        "min": 38,
+        "max": 38
+      },
+      "wait_events": {
+        "mean": 20.0,
+        "min": 20,
+        "max": 20
+      },
+      "rollbacks": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "resources_rolled_back": {
+        "mean": 8.0,
+        "min": 8,
+        "max": 8
+      },
+      "held_while_waiting": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "wall_time_s": {
+        "mean": 0.0054613264677755066,
+        "min": 0.0043331310007488355,
+        "max": 0.007558593999419827
+      }
+    },
+    {
+      "input_name": "p6_randomized_stress.txt",
+      "scheduler": "PRIORITY",
+      "allocator": "FIRST_FIT",
+      "policy": "ROLLBACK",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 20.166666666666668,
+        "min": 20.166666666666668,
+        "max": 20.166666666666668
+      },
+      "average_turnaround": {
+        "mean": 28.166666666666668,
+        "min": 28.166666666666668,
+        "max": 28.166666666666668
+      },
+      "throughput": {
+        "mean": 0.2222222222222222,
+        "min": 0.2222222222222222,
+        "max": 0.2222222222222222
+      },
+      "service_utilization_pct": {
+        "mean": 88.88888888888889,
+        "min": 88.88888888888889,
+        "max": 88.88888888888889
+      },
+      "total_resource_wait": {
+        "mean": 105.0,
+        "min": 105,
+        "max": 105
+      },
+      "max_resource_wait": {
+        "mean": 23.0,
+        "min": 23,
+        "max": 23
+      },
+      "acquisitions": {
+        "mean": 37.0,
+        "min": 37,
+        "max": 37
+      },
+      "wait_events": {
+        "mean": 12.0,
+        "min": 12,
+        "max": 12
+      },
+      "rollbacks": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "resources_rolled_back": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "held_while_waiting": {
+        "mean": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "wall_time_s": {
+        "mean": 0.005274836933676852,
+        "min": 0.004036500002257526,
+        "max": 0.007703903997025918
+      }
+    },
+    {
+      "input_name": "p6_randomized_stress.txt",
+      "scheduler": "PRIORITY",
+      "allocator": "FIRST_FIT",
+      "policy": "ORDERED",
+      "runs": 30,
+      "all_completed": true,
+      "all_safe": true,
+      "average_waiting": {
+        "mean": 25.666666666666668,
+        "min": 25.666666666666668,
+        "max": 25.666666666666668
+      },
+      "average_turnaround": {
+        "mean": 33.666666666666664,
+        "min": 33.666666666666664,
+        "max": 33.666666666666664
+      },
+      "throughput": {
+        "mean": 0.2033898305084746,
+        "min": 0.2033898305084746,
+        "max": 0.2033898305084746
+      },
+      "service_utilization_pct": {
+        "mean": 81.35593220338984,
+        "min": 81.35593220338984,
+        "max": 81.35593220338984
+      },
+      "total_resource_wait": {
+        "mean": 174.0,
+        "min": 174,
+        "max": 174
+      },
+      "max_resource_wait": {
+        "mean": 40.0,
+        "min": 40,
+        "max": 40
+      },
+      "acquisitions": {
+        "mean": 39.0,
+        "min": 39,
+        "max": 39
+      },
+      "wait_events": {
+        "mean": 20.0,
+        "min": 20,
+        "max": 20
+      },
+      "rollbacks": {
+        "mean": 8.0,
+        "min": 8,
+        "max": 8
+      },
+      "resources_rolled_back": {
+        "mean": 9.0,
+        "min": 9,
+        "max": 9
+      },
+      "held_while_waiting": {
+        "mean": 7.0,
+        "min": 7,
+        "max": 7
+      },
+      "wall_time_s": {
+        "mean": 0.005825865200313274,
+        "min": 0.004219770999043249,
+        "max": 0.010821376999956556
+      }
+    }
+  ]
+}

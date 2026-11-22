@@ -1,3 +1,10 @@
+CURRENT STATUS: the foundation is integrated with real memory and Final modules.
+Aarush experiments/fake/fixtures and the targeted Samar fixes are present.
+Use README.md and DEVELOPMENT.md for current commands, results, and archive
+checks. Remaining Final limitations are in docs/implementation_audit.md.
+The module usage descriptions below remain useful; historical references to
+owners waiting on modules should not be read as current implementation status.
+
 My modules (K1-K11) are done and tested, and you can build on them now.
 Here's how to use them. The full signatures are in library_sim.pyi, and
 DEVELOPMENT.md has the repo layout.

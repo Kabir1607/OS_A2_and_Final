@@ -1,3 +1,45 @@
+# Current remediation and delivery status
+
+This section updates the historical audit below for base `8f256e6` plus the
+A6/A7/A9/A10 working changes, validated on Python 3.12.3. The original findings
+are preserved below as evidence of the pre-fix state, not current failures.
+
+| Area | Current result |
+|---|---|
+| A6 | Eight edge cases + one comparison input; 54 complete golden exports, independent unit-time workbook, explicit hand-calculated anchors, repeated-output and conservation checks. |
+| A7/A7b | Full contracted experiment API/CLI; six allocator rows; 24 policy cells × 30 = 720 safe, complete runs; Markdown spreads, per-metric comparisons, JSON instrumentation snapshot. |
+| A7c | Independent fake memory and shared real/fake behavior checks. |
+| A9/A10 | Memory discussion, Python A1 comparison, complete A2 README/checklist, current Final README, actual archive docs/samples/tests. |
+| Worker overlap | Bounded barrier waves before resource locks; regressions assert distinct workers, positive interval overlap, waves, singles, contention, exceptions. Actual trace retained. |
+| Shared traces | Each Simulation audits only its event slice; aggregate caller history remains intact. DemoReport.events matches result.trace. |
+| Action validation | Descending per-reader offsets rejected before replay; semantic action errors use actual row numbers. |
+| Policy claims | Unsupported predictions replaced by 720 measured runs; retain validated ROLLBACK, with documented workload-dependent trade-offs. |
+| Archive checks | Both extracted suites, six CLI combinations, allocator command; Final also runs packaged demo and policy command. A2 has no five Final-only library modules. |
+
+Baseline regressions reproduced four failures before edits: missing controlled
+overlap, descending offsets accepted, incorrect semantic error line, and
+cross-run trace contamination. They pass after corrections. Current root
+suite has 173 tests (172 passed, one expected skip); standalone A1 retains
+17 passing tests and 20/20 golden cases. No public interface signatures or
+graded output formats changed.
+
+[Manual anchors](aarush/fixture_checks.md), [independent workbook](aarush/fixture_derivations.md),
+[allocator results](aarush/allocator_comparison.md), [policy results](aarush/policy_comparison.md),
+[JSON](aarush/policy_results.json), and [overlap evidence](aarush/overlap_evidence.txt)
+provide current evidence. Measurements include in-memory trace replay and
+barrier coordination; they are not platform-independent timing guarantees.
+
+Remaining outside the agreed four-issue/blocker scope: normal Final CLI still
+accepts NONE; multi-resource handoff provenance/adjacency and early UNBLOCK
+ordering differ from the contract; out-of-order counters are ORDERED-only;
+optional blocking-demo statistics/timeouts remain limited; free-threaded/PyPy
+portability and global fairness are unproven. Optional A8 and Final presentation
+material are not completed. No claim of complete Final compliance is made.
+
+---
+
+## Historical pre-fix audit (code f69cd13)
+
 # Implementation audit for Aarush and Samar's documentation
 
 Audited on 22 November 2026 with Python 3.12.3 against code revision `f69cd13`.

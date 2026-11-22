@@ -1,132 +1,79 @@
-# Smart Library: OS Lab Assignment 1 (Python port)
+# Smart Library — Assignment 1 Python baseline
 
-A Python port of the group's C++ Assignment 1 (`../Assignment_1-OS_Lab_C++`).
-Readers are processes, served by two identical librarians under **FCFS** or
-**non-preemptive Priority Scheduling** in a discrete-event simulation with
-integer virtual time.
+Group: Kabir, Urvashi, Aarush, Samar. Python 3.10+ and the standard library.
+The C++ predecessor is deprecated and not required. Readers are processes,
+served by two identical librarians using FCFS or non-preemptive Priority.
+Service is integer virtual time; the simulator never sleeps to represent it.
 
-A2 and the Final Project are written in Python, and they must keep A1's
-behaviour. So this port reproduces the C++ program **byte for byte** on
-the same input and algorithm. The modules follow the group's interface
-contract (`../library_sim.pyi`), so A2 and the Final can reuse them
-directly.
-
-## Requirements
-
-Python 3.10 or newer. Standard library only, no installation needed.
-
-## Run
+From this directory:
 
 ```bash
 python3 main.py input.txt FCFS
 python3 main.py input.txt PRIORITY
-# equivalently:
-python3 -m library_sim.a1 input.txt FCFS
+python3 -m unittest discover -s tests -v
+python3 tests/run_tests.py
 ```
 
-```
-python3 main.py INPUT_FILE ALGORITHM
-```
+CLI: `python3 main.py INPUT_FILE FCFS|PRIORITY`. Input is N, positive Q,
+then N records `ID,ARRIVAL,PRIORITY,SERVICE,CATEGORY`. Arrival is nonnegative;
+service/priority positive; IDs unique. Category is descriptive. Q is validated
+but unused. A1 preserves its legacy parser behavior: category is the rest of
+the row and extra rows after N are ignored; numeric parsing uses Python int.
+A2/Final use their stricter seven-field parser instead. Invalid/missing input
+or bad arguments return 1, with `Error:` on stderr and no normal stdout report.
 
-- `INPUT_FILE`: the reader count N, the Round Robin quantum Q (read and
-  validated but unused, because Library has no Round Robin), then N rows
-  of `ID,ARRIVAL,PRIORITY,SERVICE,CATEGORY`.
-- `ALGORITHM`: `FCFS` or `PRIORITY` (uppercase).
+## Scheduling and lifecycle
 
-The result is printed to stdout in the A1 machine-readable format, the same
-as the C++ version:
+Readers move NEW → READY → RUNNING → TERMINATED conceptually; the A1 port
+computes the resulting timestamps directly. FCFS chooses arrival then string
+ID. Priority chooses smaller priority number, then arrival, then ID. R10 sorts
+before R2. Running readers are never preempted by later higher-priority arrivals.
+Each dispatch uses the earliest available librarian, librarian 0 on ties.
+No memory allocation, books, threads, RR, or preemption are needed for A1.
 
-```
-PROCESS_ID,ARRIVAL,PRIORITY,SERVICE,START,COMPLETION,WAITING,TURNAROUND,RESPONSE
-R1,0,3,7,0,7,0,7,0
-...
-SUMMARY
-AVERAGE_WAITING,2.600000
-AVERAGE_TURNAROUND,7.600000
-AVERAGE_RESPONSE,2.600000
-THROUGHPUT,0.384615
-UTILIZATION,96.153846
-```
+The package separates models, scheduler, metrics, formatter, errors, and the
+A1 parser/runner. Six implementation modules are shared copies of the current
+`src/library_sim` foundation; the tests compare bundled golden outputs without
+requiring a C++ executable or directory.
 
-Errors (wrong arguments, unknown algorithm, missing or malformed file) go
-to stderr as `Error: ...`, with a line number where it applies. The exit
-status is then 1 and nothing is printed to stdout.
+## Output and metrics
 
-## Code layout and mapping from C++
+Output begins with
+`PROCESS_ID,ARRIVAL,PRIORITY,SERVICE,START,COMPLETION,WAITING,TURNAROUND,RESPONSE`,
+then reader rows sorted by ID, then SUMMARY and five named values:
+AVERAGE_WAITING, AVERAGE_TURNAROUND, AVERAGE_RESPONSE, THROUGHPUT, UTILIZATION.
+Summaries retain six decimal places.
 
-| C++ (`../Assignment_1-OS_Lab_C++/src`) | Python | Notes |
-|---|---|---|
-| `process.h` | `library_sim/models.py` | `ReaderSpec` (input row), `State` + legal transitions, `Reader`, `ReaderResult`, plus the shared constants and types A2/Final need |
-| `input.h/.cpp` | `library_sim/a1.py`: `read_a1_input`, `parse_a1_text` | now validates input (see below) |
-| `fcfs.h/.cpp` | `library_sim/a1.py`: `fcfs` | same algorithm |
-| `priority.h/.cpp` | `library_sim/a1.py`: `priority_schedule` | same algorithm |
-| (tie-break rules) | `library_sim/scheduler.py`: `fcfs_key`, `priority_key`, `ReadyQueue` | the keys are used by the A1 port. `ReadyQueue` is the event-driven queue the A2/Final engine uses |
-| `metrics.h/.cpp` | `library_sim/metrics.py` | same formulas and the same floating-point operation order. Also computes the A2/Final fields (memory wait, ready wait, resource wait) |
-| `output.h/.cpp` | `library_sim/output.py`: `format_a1` | same text, 6 decimals. `fmt_decimal` (4 decimals) is for A2/Final |
-| `main.cpp` | `library_sim/a1.py`: `a1_main`, plus `main.py` | |
-| — | `library_sim/errors.py` | `InputError`, `UsageError` |
-| `tests/run_tests.sh` | `tests/run_tests.py` | |
+For A=arrival, S=first start, C=completion, B=service: turnaround=C−A,
+response=S−A, waiting=C−A−B. With E=last completion−first arrival,
+throughput=N/E and utilization=sum B/(2E)×100. Initial time before the first
+arrival is excluded; idle gaps inside the observation window are included.
 
-## Algorithms (unchanged from the C++ version)
+## Measured scheduler comparison
 
-- **FCFS:** readers are sorted by arrival, with equal arrivals in
-  lexicographic ID order. Each reader goes to the librarian who becomes
-  free first (librarian 0 on ties). It starts at the later of that
-  librarian's free time and its own arrival.
-- **Priority (non-preemptive):** whenever a librarian becomes free (the
-  earliest one, librarian 0 on ties), it serves the arrived reader with
-  the smallest priority number. Ties go to the earlier arrival, then the
-  lexicographically smaller ID. If nobody has arrived yet, the clock jumps
-  to the next arrival.
-- IDs compare as strings, so `R10` comes before `R2`.
-- **Metrics:**
-  - per reader: waiting = turnaround − service, turnaround = C − A,
-    response = S − A
-  - throughput = N / E
-  - utilization = Σ service / (2 × E) × 100
-  - E = last completion − first arrival
+On `tests/inputs/spec_sample.txt`:
 
-The algorithm comparison and analysis from the C++ README
-(`../Assignment_1-OS_Lab_C++/README.md`) apply unchanged, because the
-outputs are identical.
+| Scheduler | Average waiting | Average turnaround | Average response | Throughput | Librarian utilization % | Last completion |
+|---|---:|---:|---:|---:|---:|---:|
+| FCFS | 2.600000 | 7.600000 | 2.600000 | 0.384615 | 96.153846 | 13 |
+| PRIORITY | 2.200000 | 7.200000 | 2.200000 | 0.384615 | 96.153846 | 13 |
 
-## Differences from the C++ version
+Priority serves R5 at 5 rather than 10, ahead of lower-priority R3. R3 starts
+at 8 rather than 5. It improves averages here without changing final elapsed
+time or busy work, so throughput/utilization tie. This does not make Priority
+universally superior: it has no aging and can repeatedly delay low-priority
+readers. `starvation.txt` demonstrates finite postponement, not an infinite
+execution. FCFS preserves arrival-order service but can keep short readers
+behind long ones.
 
-On valid input there are none: the output is identical. Invalid input now
-gets a clear error message where the C++ program crashed or misbehaved
-(C++ README, "Known Limitations"). The parser rejects:
-- an empty file
-- N < 1, or Q missing or < 1
-- fewer than N reader rows
-- rows without 5 fields
-- non-integer numbers
-- empty, whitespace-containing or duplicate IDs
-- ARRIVAL < 0, PRIORITY < 1 or SERVICE < 1
-- an empty CATEGORY
+## Validation and limitations
 
-Trailing blank lines and Windows (CRLF) line endings are accepted. As in
-the C++ reader, CATEGORY is the rest of the row and lines after the N
-reader rows are ignored.
+The standalone suite has 17 tests and the golden runner checks 10 inputs ×
+2 algorithms = 20 output files. Cases cover one reader, ties, simultaneous
+arrivals, arrivals during service, long/short service, idle gaps, and priority
+postponement. Claims of old C++ differential runs are historical; the current
+verification uses the checked-in Python fixtures.
 
-## Tests
-
-```bash
-python3 tests/run_tests.py                  # 10 inputs x 2 algorithms vs tests/expected
-python3 -m unittest discover -s tests -v    # regression + unit tests
-```
-
-- `tests/inputs` and `tests/expected` are copied unchanged from the C++
-  project. Every expected file is reproduced byte for byte.
-- `tests/test_a1.py` covers:
-  - the same regression, both in-process and through the CLI
-  - CLI error handling and every parser validation rule
-  - lexicographic ID ordering, priority vs arrival, idle gaps
-  - the `ReadyQueue`, lifecycle transitions and the A2-style metric fields
-- Differential check: the Python port and the compiled C++ program were also
-  run on 3000 random inputs × both algorithms, covering:
-  - 1–25 readers
-  - simultaneous arrivals and long gaps
-  - service times up to 1000
-  - IDs like `R10` vs `R2`
-
-  All 6000 outputs were identical.
+The project adds no A1 optional scheduler or aging feature. This directory
+is independently runnable. See the A2 README for six-seat admission and
+memory metrics, and the separate Final README for shared-resource work.

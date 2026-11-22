@@ -2,14 +2,14 @@
 
 **Implementation owner:** Samar (`sam-b02`).
 
-**Audited code:** `f69cd13`, 22 November 2026, Python 3.12.3.
+**Current validation:** base `8f256e6` plus the A6/A7 and targeted Sam fixes, Python 3.12.3.
 
 **Evidence:** [implementation audit](../implementation_audit.md).
 
-The five Final modules are implemented. Integrated samples pass, but worker
-overlap evidence, some contract details, measured comparisons, and complete
-submission packaging remain unfinished. S1–S9 are assigned work items; this
-document does not mark every subtask complete.
+The five Final modules and full experiment harness are integrated. Controlled
+worker overlap, per-run trace isolation, and action ordering/error-line fixes
+have regressions. The complete 720-run policy comparison is recorded below.
+Other explicitly listed Final limitations and presentation work remain open.
 
 ## Library resources and deadlock conditions
 
@@ -34,11 +34,11 @@ release is distinct from interrupting a reader's service.
 
 | Module | Implemented behavior | Important limit |
 |---|---|---|
-| `resource_parser.py` | Parses R/K sections; checks named capacity-one resources, units, offsets, references, balanced ownership replay. | Sorts actions first, accepting descending offsets; semantic errors can point to the R-count line. |
+| `resource_parser.py` | Parses R/K sections; checks named capacity-one resources, units, offsets, references, balanced ownership replay. | Rejects descending per-reader offsets before replay; semantic action errors carry their source line. |
 | `resources.py` | Locks ownership, waiters, grants/releases, counters, and resource-event emission; implements all three policies. | Fairness and trace shapes depend on policy. |
-| `workers.py` | Uses real executor threads; stops at a blocked acquire; propagates exceptions; returns results in input order. | Short batches can all use one worker; overlap is not guaranteed. |
+| `workers.py` | Uses real executor threads; stops at a blocked acquire; propagates exceptions; returns results in input order. | Multi-batch waves meet at a bounded barrier before resource operations; one worker/batch needs no barrier. |
 | `trace.py` | Locks enabled event recording and sink writes; records sequence, virtual time, IDs, thread name; replays ownership. | Disabled tracers retain no history to audit. |
-| `deadlock.py` | Defines ranks/policies/counters; finds cycles; runs the real-engine unsafe demo when memory exists; offers a separate blocking demo. | A supplied tracer is reused across policies; the optional demo uses synthetic simulation statistics. |
+| `deadlock.py` | Defines ranks/policies/counters; finds cycles; runs the real-engine unsafe demo when memory exists; offers a separate blocking demo. | Each result audits its own event slice even with a shared tracer; the optional demo still has synthetic statistics. |
 
 ## Coordinator, workers, and synchronization
 
@@ -60,10 +60,14 @@ polling for correctness. Resource ownership locking does not assume the GIL
 makes multi-step operations atomic. Free-threaded Python and PyPy were not
 validated, so their correctness is not claimed as a tested result.
 
-**Normal-worker overlap evidence is still pending.** In 100 audit trials,
-two short batches used the same worker and recorded no overlap. The existing
-overlap test checks only name prefixes. A barrier exists in the separate
-blocking demo and a stress test, not in normal WorkerPool submission.
+**Controlled overlap is now demonstrated.** WorkerPool submits waves no larger
+than worker capacity and meets at a barrier before taking a resource lock.
+Start times precede the barrier; end times follow batch operations. The five-second
+barrier timeout bounds a broken rendezvous. Results stay in submission order.
+Tests assert distinct threads and positive interval overlap, including more
+batches than workers, one worker/batch, empty input, contention, and exceptions.
+[Actual overlap trace](../aarush/overlap_evidence.txt) records thread names and
+real intervals. The engine shuts workers down even if a batch raises.
 
 ## Blocking, wake-up, and fairness
 
@@ -123,23 +127,41 @@ fairness for every possible input.
 
 ### Default and comparison status
 
-`DEFAULT_POLICY` is ROLLBACK. It is the current engineering default; a measured
-P1–P6 selection is not complete and `experiments.py` is absent. The earlier
-winner table has been removed because it presented expectations as results.
+`DEFAULT_POLICY` remains ROLLBACK after validation. Both policies completed
+all 720 measured runs safely: six inputs × two schedulers × two policies × 30.
+The full [mean/min/max report](../aarush/policy_comparison.md) and
+[JSON snapshot](../aarush/policy_results.json) record Python version, seed,
+repeats, and instrumentation. FIRST_FIT was used throughout. Wall time includes
+in-memory ownership tracing and the same worker barriers for both policies.
 
-A focused P1 audit used FIRST_FIT, both schedulers, and 30 runs per policy:
+The following are observed means, not predicted winners:
 
-| Scheduler | Policy | Runs | Rollbacks each run | Total resource wait each run | Last completion each run |
-|---|---|---|---|---|---|
-| FCFS | ROLLBACK | 30 | 0 | 5 | 11 |
-| FCFS | ORDERED | 30 | 0 | 5 | 11 |
-| PRIORITY | ROLLBACK | 30 | 0 | 5 | 11 |
-| PRIORITY | ORDERED | 30 | 0 | 5 | 11 |
+| Case | Scheduler | Avg wait ROLLBACK / ORDERED | Worst resource wait R / O | Rollbacks R / O |
+|---|---|---|---|---|
+| p1 | FCFS | 2.5000 / 2.5000 | 5.0000 / 5.0000 | 0.0000 / 0.0000 |
+| p1 | PRIORITY | 2.5000 / 2.5000 | 5.0000 / 5.0000 | 0.0000 / 0.0000 |
+| p2 | FCFS | 7.6667 / 7.6667 | 13.0000 / 13.0000 | 2.0000 / 1.0000 |
+| p2 | PRIORITY | 7.6667 / 7.6667 | 13.0000 / 13.0000 | 2.0000 / 1.0000 |
+| p3 | FCFS | 3.6667 / 4.0000 | 7.0000 / 7.0000 | 1.0000 / 1.0000 |
+| p3 | PRIORITY | 3.6667 / 4.0000 | 7.0000 / 7.0000 | 1.0000 / 1.0000 |
+| p4 | FCFS | 0.0000 / 0.0000 | 0.0000 / 0.0000 | 0.0000 / 0.0000 |
+| p4 | PRIORITY | 0.0000 / 0.0000 | 0.0000 / 0.0000 | 0.0000 / 0.0000 |
+| p5 | FCFS | 2.7500 / 2.7500 | 5.0000 / 5.0000 | 0.0000 / 0.0000 |
+| p5 | PRIORITY | 1.5000 / 1.5000 | 3.0000 / 3.0000 | 0.0000 / 0.0000 |
+| p6 | FCFS | 19.7500 / 24.9167 | 26.0000 / 49.0000 | 10.0000 / 7.0000 |
+| p6 | PRIORITY | 20.1667 / 25.6667 | 23.0000 / 40.0000 | 7.0000 / 8.0000 |
 
-Those P1 metrics tie; no wall-time or fairness winner is established. P2–P6
-are fixed candidate examples, not measured winners. P5 has three single-book
-readers rather than an unbounded stream; P6 is not a random generator and
-its last two readers have no resource actions.
+P1 and P4 tie on the virtual waiting/churn measures. P2 has equal waiting
+but fewer ORDERED rollbacks. P3 favors ROLLBACK on average waiting in this
+snapshot. P5 shows no rollback under either policy; it does not demonstrate
+starvation. P6 favors ROLLBACK on average and worst resource wait under both
+schedulers. These observations support retaining ROLLBACK together with its
+zero-held-while-waiting invariant; they do not establish a universal optimum.
+Racing outcomes and wall times may vary on another run or machine.
+
+P5 is finite. P6 is now a fixed-seed 12-reader/four-book stress example,
+with balanced requests from every reader; regenerate it with the checked-in
+seed-3710 script. Full spreads matter more than rounding a single timing.
 
 ## Trace and statistics details
 
@@ -180,11 +202,12 @@ partial report and return 2. Parser/usage errors return 1 before result writing;
 writing errors can leave partial files. Worker RuntimeErrors propagate and
 are not among the CLI's caught exceptions.
 
-`run_unsafe_demo()` uses separate tracers by default. Supplying a single Tracer
-across policies contaminates later audits with unsafe holdings; this reproduced
-two false violations in each safe report. The default sample path is relative
-to the working directory, so run from the repository root. Generated ZIPs do
-not contain the input: the packaged default demo fails without an external copy.
+`run_unsafe_demo()` uses separate tracers by default. With a supplied tracer,
+the caller retains aggregate history but the engine starts a fresh event slice
+for each run; each DemoReport exposes only its own result.trace. Existing
+caller events therefore cannot contaminate later safety checks. Run from the
+repository root in a source checkout; extracted archives now include the
+relative default sample path too.
 
 The optional `run_blocking_demo()` is callable from Python. It uses two actual
 threads, a barrier, the same ResourceManager under NONE, and timed condition
@@ -194,18 +217,18 @@ benchmark. Its barrier and thread joins have no timeout protection.
 
 ## Evidence and remaining work
 
-Root discovery at the audited revision found 134 tests: 133 passed and one
-missing-module check was skipped because that module exists. Another 360
-integrated sample runs completed with zero reported violations/deadlocks.
-Some stress tests do not assert completion or end-of-run conservation; the
-different-copy test uses sequential calls. They do not prove every concurrency
-claim or complete S7.
+Current root discovery finds 173 tests: 172 pass and one missing-module check
+is skipped because that module exists. All 54 A2 golden outputs match an
+independent reference and repeated exports. New regressions failed before
+the fixes and pass afterward. The measured policy run count is 720, with
+independent trace safety checks enabled. Both archives now contain their
+README, inputs, documentation, and applicable tests; the default packaged
+deadlock demo and experiment commands are smoke-tested.
 
-Resource/worker fakes exist. The resource fake uses NONE-style ownership
-regardless of supplied policy, and the worker fake runs synchronously. Use
-real modules for prevention-policy and concurrency validation.
-
-Pending: controlled overlap evidence; the parser, trace, CLI, and shared-tracer
-corrections above; stronger regressions; measured policy/default comparisons;
-complete READMEs/archive contents; and presentation material. Detailed evidence
-and remaining Aarush tasks are in the linked audit.
+Real and fake memory satisfy the same behavior cases. Resource/worker fakes
+retain their older limitations: NONE-style resource behavior regardless of
+policy, and synchronous worker execution. Use real modules for policy tests.
+Some old stress tests still do not establish global fairness or completion on
+all inputs. Remaining trace provenance/order, CLI NONE validation, counter,
+optional-demo and portability limitations are in the audit. Presentation
+material and a timed viva rehearsal remain separate Final work.

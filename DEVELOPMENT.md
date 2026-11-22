@@ -1,64 +1,73 @@
-# Developer guide (A2 + Final shared code)
+# Developer guide
 
-- **Contract:** `library_sim.pyi`: every module's signatures and behaviour rules.
-- **Tasks:** `division_of_work.txt`.
-- **Python:** 3.10+. Standard library only at runtime.
+Python 3.10+, standard library only. Work in `src/library_sim`; the standalone
+Python A1 package is the maintained snapshot baseline. C++ is deprecated.
 
-## Layout
+## Structure and interfaces
 
-```
-library_sim.pyi          interface contract (source of truth)
-src/library_sim/         the shared package: one module per .pyi section
-tests/contract/          one test_<module>_contract.py per module + test_pyi_conformance.py
-tests/fakes/             shared fakes (fake_<module>.py), published by each owner
-tests/integration/       cross-module tests; they skip until the modules they need exist
-docs/readme/             README sections, assembled into the A2 and Final READMEs
-Assignment_1-OS_Lab_Python/   the standalone A1 port (an A1 snapshot of the shared modules)
-```
+`library_sim.pyi` defines public module signatures, dataclass field order,
+and inter-module behavior. No public signatures changed in this work.
+Use relative imports inside the package. A2 must run with resource_parser,
+trace, resources, workers, and deadlock absent; experiment type hints use
+TYPE_CHECKING and policy imports occur only in Final branches.
 
-The package is under `src/` on purpose. A `library_sim/` folder next to
-`library_sim.pyi` would be shadowed by the stub in IDEs and type
-checkers.
+The coordinator owns Reader, ready/admission queues, and seats. ResourceManager
+and Tracer protect worker-accessible state with locks. Workers meet before
+resource operations in waves no larger than the executor's worker capacity.
+Never add sleeps or polling to make a run correct.
 
-## Run the tests
+## Tests
 
 From the repository root:
 
 ```bash
-python3 -m unittest discover -s tests -t . -v                 # everything
-python3 -m unittest tests.contract.test_pyi_conformance -v    # does my module match the .pyi?
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -t . -v
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.contract.test_pyi_conformance -v
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.integration.test_a2_fixtures -v
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.contract.test_samar_regressions -v
 ```
 
-`test_pyi_conformance` reads `library_sim.pyi` and checks every module
-that exists in `src/library_sim/` against its section:
-- function and method parameter names, kinds and order
-- dataclass fields and their order
-- enum values
-- properties and constants
+Current snapshot: 173 root tests, one expected skip; standalone A1 has 17
+passing tests and a separate 20-case golden runner. The shared memory contract
+classes run against real memory and the independent fake; engine integration
+continues to use real memory. Final tests do not substitute fakes for policy
+measurements. Existing resource/worker fakes retain their documented limits.
 
-Modules that don't exist yet are skipped. Run it before every PR.
+A6 has eight edge cases and one comparison input, with 54 complete golden
+exports. `tests/reference_a2.py` is a test-only unit-time oracle with no
+production simulator imports. Its values are anchored by hand-calculated
+M/S/C and seat-time constants and a checked-in workbook. Explicitly regenerate
+with `python3 -m tests.reference_a2 --write`; tests never overwrite expected files.
 
-To import the package from your own scripts: `sys.path.insert(0, "src")`,
-or run with `PYTHONPATH=src`.
+## Experiments and docs
 
-## Ready to use now (Kabir)
+```bash
+PYTHONPATH=src python3 -m library_sim.experiments allocators inputs/a2/comparison.txt --md allocator-report.md
+PYTHONPATH=src python3 -m library_sim.experiments policies inputs/policy/*.txt --repeats 30 --md policy-report.md
+```
 
-| Module | What you get |
-|---|---|
-| `errors` | `InputError(message, line_no)`: `str()` gives `line N: message`. `UsageError` |
-| `models` | constants, `State` + `LEGAL_TRANSITIONS`, all enums, `ReaderSpec`, `ResourceSpec`, `Action`, `SimulationInput` (`.n`, `.reader()`, `.actions_for()`), `Reader` (`.transition()` asserts legality), `ReaderResult` |
-| `scheduler` | `fcfs_key`, `priority_key`, `key_for`, heap-based `ReadyQueue` |
-| `parser` | `parse_text(text, mode)`, `parse_file(path, mode)`, `parse_reader_row(line, line_no)`. In FINAL mode it calls `resource_parser.parse_resource_sections(lines, start, readers)` (Samar). `lines` has trailing blank lines removed, and `start` is the 0-based index of the `R` line |
-| `metrics` | `compute_process_metrics(results)` (sorted by ID; asserts A ≤ M ≤ S ≤ C and no negative waiting), `compute_summary(metrics)` |
-| `output` | `fmt_decimal`, `format_a1`, `format_a2`, `format_final`, `write_output`. PoolStats / ResourceStats / CheckStats are only read through their attributes, so the module needs none of the other modules at run time |
-| `a1` | the A1 port. `run_a1(readers, scheduler)` is the reference for the K10 cross-check |
+Final measurements enable in-memory ownership tracing, included in wall time.
+Every constituent run must complete safely before aggregation. Means/min/max
+retain raw precision; Markdown formats values for display. The fixed P6 input
+can be regenerated by `python3 inputs/policy/generate_stress.py` (seed 3710).
+Update measured tables/JSON and analysis together when workloads change.
 
-None of these need fakes, because the real modules are done. Use them directly.
+A2's canonical README is in its stage directory and is copied into the ZIP,
+with relative documentation links adjusted. Aarush's guide includes editable
+LaTeX and a compiled PDF. Use its README's build command; keep auxiliary LaTeX
+files in temporary folders. Preserve historical audit findings and append
+remediation evidence rather than rewriting history as though bugs never existed.
 
-## Waiting on other owners
+## Build and verify exports
 
-- `tests/integration/test_engine_vs_a1.py` (K10) is active and passing:
-  with a seat pool big enough that nobody waits for memory,
-  `simulate(..., "A2")` gives the same START/COMPLETION as the A1 port on
-  all 11 A1 inputs plus 200 random ones.
-- `parser` in FINAL mode needs Samar's `resource_parser.py`.
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 build_packages.py
+```
+
+Archives contain plain Python modules, an entrypoint, mode-specific README,
+inputs, documentation, the contract, and applicable tests/A1 fixtures.
+The builder tests both extracted archives with PYTHONPATH removed. Its A2
+suite omits tests that require Final-only imports. Final additionally runs the
+packaged unsafe demo and policy experiment command. Presentation slides are
+still separate pending Final work; runnable exports do not certify every Final
+requirement. Known issues are listed in `docs/implementation_audit.md`.

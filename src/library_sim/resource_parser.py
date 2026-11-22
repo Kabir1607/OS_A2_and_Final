@@ -29,12 +29,22 @@ def validate_actions(
     actions: Sequence[Action],
 ) -> None:
     """Static checks, InputError on failure:
+      * per-reader work offsets non-decreasing in input order
       * resource IDs unique, in STANDARD_RESOURCES, CAPACITY == 1
       * reader IDs exist, resource IDs declared, UNITS == 1, 0 <= offset <= SERVICE
       * replaying each reader's own actions (sorted by offset, row):
         no RELEASE of something it doesn't hold, no ACQUIRE of something
         it already holds, and nothing still held at the end.
     """
+    _validate_actions(readers, resources, actions)
+
+
+def _validate_actions(readers: Sequence[ReaderSpec], resources: Sequence[ResourceSpec],
+                      actions: Sequence[Action], action_line_start: int | None = None) -> None:
+    """Share validation between the public API and line-aware file parsing."""
+    def line_for(action: Action) -> int | None:
+        return None if action_line_start is None else action_line_start + action.row_index
+
     seen_resources: set[str] = set()
     for res in resources:
         if res.id in seen_resources:
@@ -46,7 +56,11 @@ def validate_actions(
         seen_resources.add(res.id)
 
     reader_map = {r.id: r for r in readers}
+    last_offset: dict[str, int] = {}
     for action in actions:
+        if action.work_offset < last_offset.get(action.reader_id, -1):
+            raise InputError("WORK_OFFSET must be non-decreasing within each reader", line_for(action))
+        last_offset[action.reader_id] = action.work_offset
         if action.reader_id not in reader_map:
             raise InputError(f"unknown reader ID {action.reader_id!r} in action")
         if action.resource_id not in seen_resources:
@@ -70,18 +84,19 @@ def validate_actions(
             if action.action == ActionType.ACQUIRE:
                 if action.resource_id in held:
                     raise InputError(
-                        f"reader {reader.id} double-acquired resource {action.resource_id!r}"
+                        f"reader {reader.id} double-acquired resource {action.resource_id!r}", line_for(action)
                     )
                 held.add(action.resource_id)
             elif action.action == ActionType.RELEASE:
                 if action.resource_id not in held:
                     raise InputError(
-                        f"reader {reader.id} released unheld resource {action.resource_id!r}"
+                        f"reader {reader.id} released unheld resource {action.resource_id!r}", line_for(action)
                     )
                 held.remove(action.resource_id)
         if held:
             raise InputError(
-                f"reader {reader.id} still holds resources at completion: {', '.join(sorted(held))}"
+                f"reader {reader.id} still holds resources at completion: {', '.join(sorted(held))}",
+                line_for(reader_actions[-1])
             )
 
 
@@ -93,7 +108,7 @@ def parse_resource_sections(
     """Parse `R`, R rows of RESOURCE_ID,CAPACITY, `K`, K rows of
     ID,WORK_OFFSET,ACTION,RESOURCE_ID,UNITS, starting at lines[start]
     (0-based index). If R is present, K and both row counts must be too.
-    Then calls validate_actions. Raises InputError (with line_no).
+    Uses the same checks as validate_actions, retaining input line numbers.
     """
     if start >= len(lines):
         raise InputError("missing resource count R", start + 1)
@@ -197,11 +212,6 @@ def parse_resource_sections(
             extra_idx + 1,
         )
 
-    try:
-        validate_actions(readers, declared_resources, actions)
-    except InputError as exc:
-        if exc.line_no is None:
-            raise InputError(exc.message, start + 1) from exc
-        raise
+    _validate_actions(readers, declared_resources, actions, action_line_start=k_idx + 2)
 
     return tuple(declared_resources), tuple(actions)

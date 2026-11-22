@@ -61,9 +61,14 @@ class WorkerPool:
         )
         self.recorded_overlaps: list[tuple[str, str]] = []
 
-    def _execute_batch(self, batch: ActionBatch) -> tuple[BatchResult, float, float]:
+    def _execute_batch(self, batch: ActionBatch,
+                       gate: threading.Barrier | None = None) -> tuple[BatchResult, float, float]:
         start = perf_counter()
         thread_name = threading.current_thread().name
+        # Meet BEFORE taking any resource lock. Both workers are active even
+        # when the actual book operations are too short for natural overlap.
+        if gate is not None:
+            gate.wait(timeout=5.0)
         done = 0
         blocked = False
         woken_acc: list[str] = []
@@ -97,30 +102,38 @@ class WorkerPool:
     def run_batches(self, batches: Sequence[ActionBatch]) -> list[BatchResult]:
         """Submit every batch to worker threads, returning results in input order.
 
-        Re-raises any worker exceptions.
+        Waves use at most num_workers participants. Multi-batch waves meet
+        at a bounded barrier before resource locks; single batches skip it.
+        Re-raises worker exceptions, including a broken barrier.
         """
         if not batches:
             return []
 
-        futures = [self._executor.submit(self._execute_batch, b) for b in batches]
         results: list[BatchResult] = []
         intervals: list[tuple[str, float, float]] = []
 
-        for future in futures:
-            res, start, end = future.result()
-            results.append(res)
-            intervals.append((res.thread, start, end))
+        # A barrier must never require more participants than available workers.
+        # Waves also preserve the public result order for arbitrary batch counts.
+        for offset in range(0, len(batches), self.num_workers):
+            wave = batches[offset:offset + self.num_workers]
+            gate = threading.Barrier(len(wave)) if len(wave) > 1 else None
+            futures = [self._executor.submit(self._execute_batch, b, gate) for b in wave]
+            for future in futures:
+                res, start, end = future.result()
+                results.append(res)
+                intervals.append((res.thread, start, end))
 
         # Check for real concurrency / execution overlap (S5b)
         for i in range(len(intervals)):
             for j in range(i + 1, len(intervals)):
                 t1, s1, e1 = intervals[i]
                 t2, s2, e2 = intervals[j]
-                if t1 != t2 and not (e1 < s2 or e2 < s1):
+                if t1 != t2 and s1 < e2 and s2 < e1:
                     self.recorded_overlaps.append((t1, t2))
                     if self.manager._tracer and self.manager._tracer.sink:
                         self.manager._tracer.sink.write(
-                            f"[overlap] threads {t1} and {t2} overlapped in real execution\n"
+                            f"[overlap] {t1} [{s1:.9f}, {e1:.9f}] and "
+                            f"{t2} [{s2:.9f}, {e2:.9f}] in real execution\n"
                         )
                         self.manager._tracer.sink.flush()
 

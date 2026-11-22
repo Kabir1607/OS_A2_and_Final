@@ -1,6 +1,16 @@
 SMART LIBRARY: DIVISION OF WORK (A1 port, A2, Final)
 =====================================================
 
+CURRENT IMPLEMENTATION SNAPSHOT (Aarush/Samar follow-up)
+- Aarush A1-A7 (including A7b/A7c), A9 and A10 are implemented: real/fake
+  memory contracts, 54 A2 golden exports with independent/manual checks,
+  six allocator comparisons, 720 safe policy runs, READMEs, and archive checks.
+- A8 runtime memory-map/timeline remains optional and unimplemented.
+- Worker overlap, per-run trace isolation, input ordering/action-line errors
+  have targeted fixes/regressions. Other Final audit issues remain documented.
+- ROLLBACK is retained as the validated default, with measured trade-offs.
+- See docs/implementation_audit.md for historical findings and current status.
+
 Interface contract: library_sim.pyi (repo root). Every function you
 provide or call is specified there: inputs, outputs, errors and who owns
 it. Code against it, not against someone's half-finished file. If you

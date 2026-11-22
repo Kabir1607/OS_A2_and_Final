@@ -1,0 +1,25 @@
+[t=0 #1 MainThread] R1 ARRIVE
+[t=0 #2 MainThread] R1 BLOCK_MEMORY
+[t=0 #3 MainThread] R2 ARRIVE
+[t=0 #4 MainThread] R2 BLOCK_MEMORY
+[t=0 #5 MainThread] R1 ADMIT (seats=0-0)
+[t=0 #6 MainThread] R2 ADMIT (seats=1-1)
+[t=0 #7 MainThread] R1 DISPATCH (librarian=0)
+[t=0 #8 MainThread] R2 DISPATCH (librarian=1)
+[t=0 #9 worker-2] R2 ACQUIRE JOURNAL
+[t=0 #10 worker-1] R1 ACQUIRE REFERENCE_BOOK
+[overlap] worker-1 [33831.922127797, 33831.922635982] and worker-2 [33831.922363756, 33831.922542028] in real execution
+[t=1 #11 worker-1] R2 BLOCK REFERENCE_BOOK (held by R1)
+[t=1 #12 worker-1] R2 ROLLBACK JOURNAL
+[t=1 #13 worker-2] R1 ACQUIRE JOURNAL
+[overlap] worker-2 [33831.922798234, 33831.923239726] and worker-1 [33831.922829172, 33831.923153826] in real execution
+[t=4 #14 worker-1] R1 RELEASE JOURNAL
+[t=5 #15 worker-2] R1 RELEASE REFERENCE_BOOK
+[t=5 #16 worker-2] R2 HANDOFF JOURNAL (from R1)
+[t=5 #17 worker-2] R2 HANDOFF REFERENCE_BOOK (from R1)
+[t=5 #18 MainThread] R2 UNBLOCK
+[t=5 #19 MainThread] R2 DISPATCH (librarian=1)
+[t=6 #20 MainThread] R1 COMPLETE
+[t=8 #21 worker-1] R2 RELEASE REFERENCE_BOOK
+[t=9 #22 worker-2] R2 RELEASE JOURNAL
+[t=10 #23 MainThread] R2 COMPLETE

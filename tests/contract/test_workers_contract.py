@@ -115,6 +115,8 @@ class RealWorkersConcurrency(unittest.TestCase):
             # Verify results have thread names
             self.assertTrue(results[0].thread.startswith("worker-"))
             self.assertTrue(results[1].thread.startswith("worker-"))
+            self.assertNotEqual(results[0].thread, results[1].thread)
+            self.assertTrue(pool.recorded_overlaps)
 
 
 if __name__ == "__main__":

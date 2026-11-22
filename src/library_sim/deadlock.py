@@ -170,7 +170,7 @@ def run_unsafe_demo(
         deadlocked = bool(result.deadlock_cycles)
         cycle = result.deadlock_cycles[0] if result.deadlock_cycles else ()
         completed = tuple(r.id for r in result.readers)
-        events = tuple(tr.events())
+        events = result.trace
         reports.append(
             DemoReport(
                 policy=pol,

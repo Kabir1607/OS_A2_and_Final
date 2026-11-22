@@ -1,213 +1,82 @@
-URVASHI NOTES
-================
+URVASHI NOTES — CURRENT INTEGRATION STATUS
+===========================================
 
-IMPLEMENTATION STATUS
+Updated for the A6/A7/A9/A10 and targeted Sam fixes. The old dependency-ready
+status has been replaced: memory, resources, workers, parser, policies and
+experiments now exist. Python is the maintained baseline; C++ is deprecated.
+See README.md, DEVELOPMENT.md, and docs/implementation_audit.md for evidence.
+
+1. ENGINE AND MEMORY
+--------------------
+- Integer virtual-clock coordination, lifecycle checks, FIFO seat admission,
+  two librarians, FCFS/Priority, once-per-timestamp occupancy, and metrics work.
+- All 54 A2 golden exports match independently calculated fixtures and repeated
+  output. Shared real/fake memory contract cases pass.
+- The 211-input x 2-scheduler Python A1 cross-check is active and passes.
+- Resource-free Final output equals A2 numbers with RESOURCE_WAIT=0 and CHECKs.
+- Final resource actions use real workers. Blocked results precede woken-result
+  handling, seats are kept, and the blocked acquire is advanced only at wake.
+- A reused tracer is now sliced per simulation before ownership replay; demo
+  reports expose the isolated result trace while the caller keeps full history.
+- Final UNBLOCK events still occur inside the action round, before completion
+  processing, rather than the contract's numbered step 5. This is documented.
+
+2. WORKERS, PARSER, AND EXPERIMENTS
+----------------------------------
+- Workers synchronize in waves no larger than available worker capacity.
+  A bounded barrier before resource locks supplies real overlapping intervals;
+  singles skip it. Exceptions propagate and the engine shuts down workers.
+- Descending per-reader work offsets are rejected before semantic replay.
+  Equal offsets retain row order and semantic errors identify action lines.
+- Experiments run all six allocators/schedulers and repeated safe policies.
+  Any incomplete or unsafe run is rejected before publishing an aggregate.
+- The measured policy snapshot contains 720 runs: six cases x two schedulers
+  x two policies x 30. ROLLBACK is retained with measured trade-offs; neither
+  policy is described as universally faster or fairer. Wall times include
+  the same in-memory tracing and worker barriers for both policies.
+
+3. CLI AND PACKAGING
 ---------------------
+- a2_main/final_main return integer statuses. Graded output excludes trace/stats.
+- Both archives include their real READMEs, docs, samples, applicable tests,
+  contract, and required Python A1 fixtures. A2 excludes the Final library files.
+- Clean-directory checks clear PYTHONPATH, run both extracted suites, all six
+  CLI combinations and allocator experiments. Final also runs its default
+  packaged deadlock demo and a repeated policy experiment.
+- Normal Final CLI still accepts NONE despite advertising only safe policies.
+  Incomplete Final runs write a partial report and exit 2. Input/usage errors
+  return 1 before result writing; write failures can leave partial files.
+- Worker RuntimeErrors are not normalized by the ordinary simulation CLI.
+  These unrelated Final issues are retained in the audit, not silently fixed.
 
-- src/library_sim/engine.py
-- src/library_sim/cli.py
-- tests/fakes/fake_engine.py
-- tests/contract/test_engine_fake_contract.py
-- build_packages.py
-- docs/readme/urvashi_engine_cli.md
+4. VERIFIED RESULTS AND CURRENT COMMANDS
+----------------------------------------
+Root suite: 173 tests, 172 passes and one expected missing-module skip on
+Python 3.12.3. Standalone Python A1: 17 tests, plus 20/20 golden runner cases.
+The new Sam regressions failed before the fixes and pass afterward. Some old
+stress cases still do not establish completion/fairness on every workload.
 
-1. ENGINE
----------
-
-src/library_sim/engine.py implements the public CheckStats,
-SimulationResult, Simulation, and simulate() contracts from library_sim.pyi.
-
-Design decisions:
-
-- The engine is the only coordinator that owns Reader objects, ReadyQueue,
-  SeatPool, and AdmissionQueue. Worker threads are not given Reader objects.
-- Virtual time is an integer and is advanced with arrival/completion/action event calculations. The code does not use sleep() or wall-clock time for simulation correctness.
-- Wall-clock performance is stored only in SimulationResult.wall_time_s,
-  using time.perf_counter(), and is separate from virtual time.
-- Every reader state change uses Reader.transition(). This prevents illegal lifecycle changes and relies on the shared transition table from models.py.
-- Completions are processed before arrivals at a timestamp, and arrivals
-  are processed by ascending string ID. This follows the TA-approved event order.
-- Admission occurs through Aarush's AdmissionQueue, and admitted readers
-  receive M=t and are added to ReadyQueue.
-- Librarians are filled in ascending index 0, then 1. Only READY readers
-  from ReadyQueue are dispatched.
-- S is set on the reader's first dispatch and never overwritten.
-- C is set when service completes and the reader becomes TERMINATED.
-- OccupancyTracker.sample(t, pool) is called once after timestamp processing.
-- _finish() converts completed readers into immutable ReaderResult records
-  and sorts results for output/metrics.
-
-The A2 loop is the resource-free baseline. It does not import Samar's
-resource modules. This is intentional:
-
-[CONTRACT 6] A2 mode must run if resource_parser.py, trace.py, resources.py,
-workers.py, and deadlock.py are absent.
-
-In resource-free Final mode, the engine calls the same A2 loop and adds
-CheckStats(0, 0, N), with no resource results. This reproduces A2 behavior
-for scheduling and memory.
-
-The resource-bearing Final loop:
-
-- submits action batches to Samar's WorkerPool;
-- applies done/blocked results before processing woken readers;
-- advances reader.next_action after an action batch;
-- does not re-run a blocked ACQUIRE after wake-up;
-- increments resource_wait only by virtual time spent blocked;
-- frees a librarian when a reader blocks on a resource;
-- keeps seats until the reader completes;
-- asks Samar's find_cycles(wait_for_graph()) when no future event remains.
-
-The Final implementation is dependency-ready but cannot be fully verified
-until Samar's ResourceManager, WorkerPool, Tracer, and deadlock interfaces
-exist.
-
-
-2. CLI
-------
-
-src/library_sim/cli.py implements a2_main(argv) and final_main(argv).
-
-Design decisions:
-
-- Each function returns an integer exit code instead of calling sys.exit().
-  This makes the CLI directly testable.
-- Both enum values are parsed case-sensitively using Scheduler(...) and
-  Allocator(...).
-- Bad arguments raise UsageError and are printed as "Error: ..." to stderr.
-- Bad input raises InputError and follows the existing line-number behavior.
-- No output file is intentionally written if parsing or simulation fails.
-- A2 mode:
-  * requires exactly four arguments;
-  * imports only A2 foundation modules plus engine/memory;
-  * never exposes policy, trace, or stats options.
-- Final mode:
-  * parses --trace FILE|-;
-  * parses --policy ROLLBACK|ORDERED;
-  * parses --stats;
-  * parses --quiet;
-  * sends traces to a file or stderr;
-  * keeps policy statistics and wall time out of the graded output file.
-- final_main() returns exit status 2 if incomplete readers remain.
-- --demo-deadlock delegates to Samar's run_unsafe_demo(); this is not a
-  demo-only engine or locking implementation.
-
-
-3. SHARED ENGINE FAKE
----------------------
-
-tests/fakes/fake_engine.py was added to the shared fake directory.
-
-It:
-
-- has the same simulate() shape used by downstream modules;
-- does not depend on memory.py or Final-only modules;
-- returns a valid fixed ReaderResult and PoolStats shape;
-- lets Aarush build experiments.py and Samar build their demo integration
-  before the real engine is complete.
-
-tests/contract/test_engine_fake_contract.py verifies the fake's public result
-shape. It is not a private fake and is intended for the whole team.
-
-
-4. PACKAGING
-------------
-
-build_packages.py creates independent A2 and Final zips in dist/.
-
-The A2 stage copies shared package modules and excludes:
-
-- resource_parser.py
-- trace.py
-- resources.py
-- workers.py
-- deadlock.py
-
-This prevents the A2 submission from depending on Final-only modules.
-The build script:
-
-- stages separate A2 and Final packages;
-- writes a small mode-specific main.py;
-- creates dist/a2.zip and dist/final.zip;
-- extracts each archive;
-- smoke-tests package importability from a clean directory.
-
-The script requires memory.py before building, and Final packaging can only
-be fully tested after Samar's modules exist.
-
-
-5. TESTING COMPLETED SO FAR
----------------------------
-
-From the repository root:
-
-    python3 -m unittest tests.contract.test_engine_fake_contract \
-      tests.contract.test_pyi_conformance -v
-
-This passed:
-
-- fake engine result shape;
-- engine/CLI dataclass and function conformance with library_sim.pyi.
-
-Syntax validation passed with:
-
-    python3 -m py_compile src/library_sim/engine.py \
-      src/library_sim/cli.py tests/fakes/fake_engine.py build_packages.py
-
-A small in-memory memory collaborator smoke test verified:
-
-- simultaneous arrivals;
-- lower-numbered librarian fill;
-- expected START and COMPLETION timestamps;
-- no incomplete readers.
-
-The complete suite command is:
-
+Run from the repository root:
     python3 -m unittest discover -s tests -t . -v
-
-The available suite currently passes 43 tests and one engine-vs-A1 test is
-skipped because memory.py and engine integration are not complete enough for
-the existing cross-check. Two A1 fixture tests fail because
-Assignment_1-OS_Lab_C++/tests/inputs and tests/expected are absent in this
-checkout.
-
-
-6. RUNNING FROM THE REPOSITORY ROOT
------------------------------------
-
-Do not run module test names from inside the tests/ directory. unittest needs
-the repository root on sys.path so tests.contract can be imported.
-
-    cd /Users/urvashibalasubramaniam/Documents/GitHub/OS_A2_and_Final
-    python3 -m unittest tests.contract.test_engine_fake_contract \
-      tests.contract.test_pyi_conformance -v
-
-After memory.py exists, run the A1 cross-check:
-
-    python3 -m unittest tests.integration.test_engine_vs_a1 -v
-
-After both collaborators exist, build submissions:
-
+    python3 -m unittest tests.contract.test_pyi_conformance -v
+    PYTHONPATH=src python3 -m library_sim.experiments allocators inputs/a2/comparison.txt
+    PYTHONPATH=src python3 -m library_sim.experiments policies inputs/policy/*.txt --repeats 30
     python3 build_packages.py
 
-The resulting archives are dist/a2.zip and dist/final.zip.
+The build produces dist/a2.zip and dist/final.zip. The corresponding stage
+READMEs contain complete source-checkout and extracted-directory commands.
 
+5. REMAINING FINAL WORK
+------------------------
+Controlled normal-worker overlap and default packaged-demo inputs are fixed.
+Still open outside this focused delivery: multi-resource handoff provenance/
+adjacency, early UNBLOCK ordering, CLI NONE validation, counter consistency,
+optional blocking-demo synthetic stats/unbounded joins, and broader portability
+and fairness validation. Optional A8 runtime visualization is not implemented.
+Presentation slides and a timed demo/viva rehearsal remain separate work.
 
-7. REMAINING URVASHI WORK
--------------------------
-
-The following is not complete until the collaborators are done:
-
-- real A2 integration testing against memory.py;
-- real engine-vs-A1 cross-check;
-- resource-bearing Final loop integration with Samar's modules;
-- policy and trace smoke tests;
-- independent A2 zip smoke test;
-- independent Final zip smoke test;
-- integration cases U9a-f;
-- assembly of Urvashi's README/presentation material;
-- any bugs found when real modules replace fakes.
-
+The glossary below remains explanatory; statements about intended contract
+ordering are not a claim that every historical interface rule is implemented.
 
 **************
 
@@ -336,8 +205,8 @@ completion.
 - max_ext_frag is the maximum external-fragmentation value seen.
 - PoolStats contains name, capacity, peak, integral, max fragmentation,
   start time, end time, and utilization_pct.
-- utilization_pct = occupied_integral / (capacity * (end_time-start_time)).
-  A2 output multiplies this percentage value by 100 through Kabir's format.
+- utilization_pct = occupied_integral / (capacity * (end_time-start_time)) * 100.
+- PoolStats already returns a percentage; output.py only formats it.
 
 
 8.8 Librarians and dispatch
@@ -397,7 +266,8 @@ completion.
 
 8.11 Discrete-event loop
 
-The engine processes all events at t in frozen order:
+The contract intends this order; current Final wake processing happens
+inside the action round before completions (documented deviation):
 
 1. due resource actions;
 2. completions by ascending ID;
@@ -530,7 +400,8 @@ no resource wait added for that round.
 - Status 0: success.
 - Status 1: usage or input error; stderr starts with "Error:".
 - Status 2: Final run ended incomplete/deadlocked.
-- A failed run must not write an output file.
+- Input/usage errors precede output writing. Incomplete Final runs write a report
+  and exit 2; a write failure can also leave a partial file.
 - Enum values are case-sensitive.
 
 
@@ -561,14 +432,16 @@ no resource wait added for that round.
 
 8.21 Packaging and lazy imports
 
-- build_packages.py creates dist/a2.zip and dist/final.zip.
+- build_packages.py creates dist/a2.zip and dist/final.zip, with actual
+  READMEs, inputs, documentation, applicable tests, and the contract.
 - The A2 archive excludes:
   resource_parser.py, trace.py, resources.py, workers.py, deadlock.py.
 - A2 cli.py must not import these modules.
 - Lazy import means Final modules are imported only inside Final execution.
 - Final imports parser.resource_parser only when parse_text(..., "FINAL").
 - A package must run from a clean extracted folder with plain python3.
-- A build smoke test proves import and execution in the intended directory.
+- Build smoke checks run extracted tests, six CLI combinations, experiments,
+  and the Final default demo with source-path assistance removed.
 
 
 8.22 Fakes, contracts, and tests

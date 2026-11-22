@@ -182,7 +182,9 @@ class Simulation:
             self.worker_pool.shutdown()
             resources = tuple(self.manager.stats())
             policy_stats = self.manager.policy_stats()
-            trace = tuple(self.tracer.events())
+            # A caller may reuse a tracer across sequential simulations. Only
+            # this run's ownership changes belong in this run's safety audit.
+            trace = tuple(self.tracer.events()[self._trace_start:])
             from .trace import audit_exclusivity
 
             checks = CheckStats(
@@ -460,9 +462,15 @@ class Simulation:
         self.ready = ReadyQueue(self.scheduler)
         self.manager = None
         self.worker_pool = None
+        self._trace_start = len(self.tracer.events()) if self.tracer is not None else 0
         if self.mode == "FINAL" and (self.inp.resources or self.inp.actions):
             self._prepare_final()
-            return self._run_final()
+            try:
+                return self._run_final()
+            finally:
+                # Also clean up when a worker raises, including a broken gate.
+                if self.worker_pool is not None:
+                    self.worker_pool.shutdown()
         return self._run_a2()
 
 

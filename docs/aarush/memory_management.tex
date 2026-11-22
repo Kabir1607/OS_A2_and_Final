@@ -4,7 +4,7 @@
 \usepackage{amsmath}
 \usepackage{listings}
 \usepackage{hyperref}
-\hypersetup{hidelinks, pdftitle={Aarush A1--A5: Library Seat Management}, pdfauthor={Aarush}}
+\hypersetup{hidelinks, pdftitle={Aarush: Memory, Experiments, and A2 Delivery}, pdfauthor={Aarush}}
 \lstset{basicstyle=\ttfamily\small, columns=fullflexible,
   keepspaces=true, breaklines=true, frame=single, showstringspaces=false}
 \setlength{\parindent}{0pt}
@@ -16,7 +16,7 @@
 \newcommand{\result}{\textbf{Result and errors.} }
 \newcommand{\example}{\textbf{Example.} }
 
-\title{Smart Library: Seat Management\\Aarush's Tasks A1--A5}
+\title{Smart Library: Memory and Experiments\\Aarush's A1--A7, A9--A10}
 \author{Function-by-function Python implementation guide}
 \date{}
 
@@ -24,15 +24,16 @@
 \maketitle
 
 This guide explains \texttt{src/library\_sim/memory.py} through library
-operations. A1--A5 here are Aarush's task identifiers in
+operations. The A-number labels here are Aarush's task identifiers in
 \texttt{division\_of\_work.txt}; they are not assignment numbers.
 The module follows the existing \texttt{library\_sim.pyi} interface contract.
 
-\textbf{Audit snapshot:} checked against code revision \texttt{f69cd13} on
+\textbf{Audit snapshot:} updated from base revision \texttt{8f256e6} with the implemented fixes on
 22 November 2026, using Python 3.12.3. The supporting repository report is
-\href{../implementation_audit.md}{\texttt{docs/implementation\_audit.md}}.
+\href{../implementation_audit.md}{implementation audit}.
 This is the function guide for the implemented memory module, not the complete
-A2 submission README or a claim that the Final project is finished.
+A2 submission README; the complete A2 README is in its stage directory.
+Remaining Final issues are recorded separately in the audit.
 
 \tableofcontents
 \newpage
@@ -490,8 +491,9 @@ cannot delay admission, so this is a sufficient unlimited-memory baseline
 without allocating a million test seats. Golden output contents and scheduling
 assertions are unchanged.
 
-At this revision, all 25 memory checks pass. Root discovery finds 134 tests:
-133 pass and one missing-module check is skipped because the Final module
+At this revision, all 25 original memory checks pass, and 24 shared behavior
+checks also pass against the independent fake. Root discovery finds 173 tests:
+172 pass and one missing-module check is skipped because the Final module
 is present. The standalone Python A1 suite passes 17 tests and its golden-output
 runner passes 20 cases. These are Python 3.12.3 results, not guarantees for
 every input or interpreter.
@@ -512,7 +514,207 @@ For the standalone Python A1 baseline, change to
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 \end{lstlisting}
 
-\section{Design choices and remaining work}
+
+\section{A6: Independent examples and golden outputs}
+
+Eight small fixtures cover simultaneous arrivals, initial idle time, FIFO
+head-of-line blocking, completion/arrival collisions, request sizes one and
+six, fragmentation, equal holes/coalescing, and long idle gaps. Together with
+the comparison input they produce 54 complete expected files: nine inputs
+multiplied by two schedulers and three allocators.
+
+The independent unit-time oracle in \texttt{tests/reference\_a2.py} imports
+no production parser, simulator, allocator, metrics or formatter. It walks the
+clock one unit at a time, admits the FIFO prefix, fills librarians, and sums
+occupied seats over each interval. It independently formats the specified
+PROCESS/SUMMARY/POOL export. This intentionally different clock makes the
+event-driven engine's jumps checkable.
+
+\routine{reference(text, scheduler, allocator)}{Independent reference}
+\librarymeaning Trace a small reading-room example independently of the real
+service engine.
+\arguments Valid seven-field fixture text and scheduler/allocator names.
+\steps Process completions, arrivals, FIFO seating and librarian dispatch;
+record post-event seat states and add occupancy for each time unit.
+\result A dictionary containing exported text, per-reader values, seat starts,
+timeline, integral, peak and fragmentation. It is a test helper for bounded
+small fixtures, not an alternative production simulator.
+\example In the HOL example, 23 seat-time units are independently obtained.
+
+\routine{tests.reference\_a2.main()}{Golden export helper}
+\librarymeaning Write the independently calculated seating workbook and exports.
+\arguments Explicit \texttt{--write} from the repository root.
+\steps Read nine fixed A2 files; calculate each of six choices; write expected
+exports and the detailed timestamp/seat workbook.
+\result 54 golden files and a Markdown derivation workbook. Ordinary tests
+never overwrite them. Input/output errors propagate during this explicit
+maintenance command; review changes before accepting new expected results.
+
+The regression suite also checks hand-calculated constants. For example,
+in the simultaneous-arrival case FCFS leaves only seat 2 occupied at time 3;
+free groups have lengths 2 and 3, giving fragmentation $5-3=2$. This late
+peak would be missed by considering only dispatch times.
+
+\href{fixture_checks.md}{Manual checks} and
+\href{fixture_derivations.md}{the full independent workbook} document every
+fixture's admission/start/completion values and post-event states. The latter
+is generated by the oracle and cross-checked with the explicit manual anchors;
+it is not described as production output used to test itself.
+
+\section{A7: Repeatable comparisons}
+
+\routine{RunSummary(...)}{RunSummary record}
+\librarymeaning A report card for one completed library run.
+\arguments The input label, scheduler, allocator, policy, SummaryMetrics,
+PoolStats, total and maximum reader resource wait, resource statistics,
+policy counters, checks, and wall-clock duration.
+\steps Store these twelve fields in an immutable dataclass.
+\result A frozen record. A2 policy/counters/checks are absent where the
+contract specifies None; book waits are zero.
+\example Compare two seating choices using the same metric definitions as
+normal exports, without mixing diagnostic values into graded output.
+
+\routine{run\_once(inp, input\_name, scheduler, allocator, mode, policy=None)}{Run once}
+\librarymeaning Serve the entire input once and reject an unfinished or unsafe
+run before using it in a comparison.
+\arguments Parsed input, label, scheduler, allocator, A2/FINAL mode, and optional
+Final prevention policy. A2 ignores policy; Final resolves the safe default.
+\steps Run the real engine; verify unique completed IDs and CHECK values;
+calculate shared process/summary metrics and resource-wait totals.
+\result RunSummary. Incomplete or unsafe observations raise ValueError;
+underlying validation/runtime failures propagate to the caller. Final runs
+record an in-memory trace so independent ownership replay participates in the
+checks. Wall time includes that instrumentation for both policies.
+
+\routine{compare\_allocators(inp, input\_name)}{Compare allocators}
+\librarymeaning Repeat the same readers with every required librarian/seating
+combination.
+\arguments One A2-compatible parsed input and a label.
+\steps Run FCFS and Priority with First/Best/Worst Fit, once per choice.
+\result Six RunSummary records in scheduler then allocator order; any failure
+aborts the comparison.
+\example The comparison fixture yields distinct FCFS fragmentation 2, 0, 1.
+
+\routine{Spread(mean, min, max)}{Spread record}
+\librarymeaning Summarize repeated observations rather than claiming one run
+represents every possible worker interleaving.
+\arguments Arithmetic mean and observed minimum/maximum for one metric.
+\steps Store the three values in an immutable record.
+\result A report of observed variability, not a confidence interval or a proof
+that future observations remain within the range.
+
+\routine{PolicyComparisonRow(...)}{PolicyComparisonRow record}
+\librarymeaning One input/scheduler/policy cell after repeated book-service runs.
+\arguments Input label, scheduler, allocator, policy, repeat count, completion
+and safety flags, then a Spread for each of these metrics:
+\begin{lstlisting}
+average_waiting, average_turnaround, throughput,
+service_utilization_pct, total_resource_wait, max_resource_wait,
+acquisitions, wait_events, rollbacks, resources_rolled_back,
+held_while_waiting, wall_time_s
+\end{lstlisting}
+\steps Store contracted fields in order. The harness only publishes cells
+whose constituent runs all completed safely.
+\result A frozen cell with True completion/safety flags; failures are exceptions,
+not silently averaged into apparently safe results.
+
+\routine{compare\_policies(inputs, ...)}{Compare policies}
+\librarymeaning Observe contention under both prevention policies repeatedly.
+\arguments Label/input pairs; optional policy/scheduler sequences; allocator
+(default First Fit); positive repeat count (default 30). Empty policies resolve
+lazily to ROLLBACK and ORDERED, keeping Final imports out of the A2 path.
+\steps Run every cell repeatedly, reject failed runs, collect values, calculate
+arithmetic mean/minimum/maximum for each metric.
+\result PolicyComparisonRow records. Invalid repeats raise ValueError. Six
+inputs with two schedulers and two policies give 24 cells and 720 runs.
+
+\routine{better\_policy\_by\_metric(rows)}{Rank metric means}
+\librarymeaning Identify which policy did better on each observed quantity,
+without inventing an overall winner.
+\arguments Completed, safe policy rows.
+\steps Group by input/scheduler; compare mean values. Lower is better except
+throughput and service utilization. Differences below $10^{-3}$ are ties.
+\result A mapping from input/scheduler/metric to a policy or None for a tie.
+Unsafe/incomplete rows raise ValueError. A smaller rollback count does not
+by itself mean better fairness, throughput or resource waiting.
+
+\routine{format\_markdown(rows)}{Format comparison report}
+\librarymeaning Make the comparison readable for the README or viva.
+\arguments A sequence of allocator summaries or policy cells.
+\steps Emit a table with labels and metrics; Spread cells show mean [min,max].
+\result Markdown text; an empty sequence returns an empty string. Raw values
+are not changed by display rounding. This does not alter graded CSV output.
+
+\routine{experiments.main(argv=None)}{Experiment CLI}
+\librarymeaning Reproduce comparisons from standard input files.
+\arguments The allocators or policies command and input paths, optional
+\texttt{--repeats}, and optional \texttt{--md} output file.
+\steps Parse input in the correct mode, complete the comparison, then print
+Markdown or write the requested report.
+\result Status 0 on success, 1 for handled argument/input/simulation/I/O errors
+with Error: on stderr. No incomplete comparison is published. File writing
+itself is not transactional. Final-only functions are unavailable in A2 archives.
+
+\subsection{A7c: The independent memory fake}
+The fake has the same public memory functions/classes already explained in
+this guide. It owns its own seating list and scans it to release a reservation;
+it does not import the real memory implementation. Its occupancy tracker
+retains observations and sums intervals when finish is called, whereas the
+real tracker accumulates earlier intervals incrementally. Both satisfy the
+same 24 memory behavior checks; real engine integration is tested separately.
+The fake illustrates the same library operations and is not a thread/policy fake.
+
+\subsection{Observed allocator behavior}
+At time 5, holes 0--2 and 4--5 surround R05 at seat 3. R04 needs two seats:
+Best Fit chooses 4--5; First/Worst Fit choose 0--1. R08 and then R01 produce
+three distinct seating layouts. Under FCFS, maximum fragmentation is 2, 0,
+and 1 while waiting/completion tie. Under Priority, Worst Fit admits R02 at
+12 instead of 13, but service still starts at 13. One memory-wait unit becomes
+ready waiting; total waiting/completion stay unchanged. The detailed table is
+in the A2 README and \href{allocator_comparison.md}{allocator measurements}.
+
+On these same readers the Python A1 baseline has the same total service
+waiting/throughput results, with memory waiting zero. This does not imply A2
+always preserves A1 timings: the head-of-line fixture leaves service capacity
+idle while a smaller reader is blocked behind the admission head.
+
+\subsection{Observed policy behavior and retained default}
+All 720 policy runs completed safely with in-memory ownership tracing. P1/P4
+tie on virtual waiting/churn; P2 ties on waiting with fewer ORDERED rollbacks;
+P3 favors ROLLBACK average waiting in this snapshot; P5 shows no rollback and
+is not starvation evidence. Fixed-seed P6 uses 12 readers and four books,
+with every reader participating in balanced actions. ROLLBACK has lower
+average/worst resource waiting on that input under both schedulers.
+
+ROLLBACK remains the validated engineering default, supported by these
+measurements and its zero-held-while-waiting invariant. There is no universal
+performance or fairness winner. See \href{policy_comparison.md}{full spreads}
+and \href{policy_results.json}{the machine-readable snapshot}. Wall timings
+include trace recording and barrier coordination and can vary by machine.
+
+\section{Sam audit: fixes relevant to these comparisons}
+Before editing the subsystem, regressions reproduced missing worker overlap,
+shared-trace contamination, accepted descending offsets, and semantic errors
+reported at the R-count line. They now pass after targeted fixes:
+
+\begin{itemize}
+\item Worker waves meet at a barrier before taking a resource lock, with at
+most the configured worker count. Five-second waits bound a broken rendezvous;
+single batches/workers skip it. Measured intervals overlap on distinct threads.
+\item Each Simulation records its initial tracer event index and audits only
+its own slice. A caller can retain aggregate history across sequential runs.
+\item Descending work offsets are rejected before replay, ties retain row
+order, and semantic input errors use action line numbers.
+\item Unsupported winner claims are replaced with the full measured report.
+\end{itemize}
+
+The real \href{overlap_evidence.txt}{overlap trace} records actual thread names
+and intervals. Other known Final issues remain in the audit: handoff trace
+provenance/adjacency, early UNBLOCK order, normal CLI acceptance of NONE,
+counter comparability, and optional blocking-demo limits. These are not hidden
+by completing the requested Aarush tasks.
+
+\section{Design choices and delivery status}
 
 Explicit loops and basic Python containers make the algorithms easy to trace
 in the viva. The implementation favors clarity over search-speed optimization.
@@ -524,27 +726,23 @@ seats idle behind a blocked head. Fragmentation can prevent a large request
 even when enough seats are free in total. Neither allocation compaction nor
 bypassing the head is part of this implementation.
 
-\subsection{Current task status}
-This delivery covers Aarush A1--A5. A6 still needs separate A2 inputs and
-hand-verified expected outputs. A7/A7b still need the experiment harness and
-measured comparisons. Memory contract tests exist, but the separate A7c fake
-does not. A8's runtime memory map/timeline is not implemented; the diagrams
-here are explanatory examples. A9/A10 still need the complete A2 README,
-comparison results, and submission instructions.
+\subsection{A9/A10 documentation and independently runnable packages}
+Aarush A1--A7 (including A7b/A7c), A9, and A10 are implemented. The complete
+A2 README combines scenario/architecture, algorithms, metric definitions,
+measured comparisons, assumptions, limitations, import/export, run/test commands,
+and the specification checklist. Optional A8 runtime maps remain absent.
 
-\subsection{Integration and packaging now present}
-The shared engine and CLI work with real memory. Samar's resource, worker,
-trace, and deadlock modules now exist and pass the bundled integrated cases.
-Controlled normal-worker overlap, several trace/parser details, and complete
-policy comparisons remain unfinished; consult the audit for limitations.
+The builder now copies actual mode-specific READMEs, input and expected-output
+files, applicable tests, the contract, and supporting documentation. A2 excludes
+all five Final-only modules and tests requiring them. Both extracted archives
+run their applicable suites and six CLI choices with source-path assistance
+removed; both run allocator experiments. Final also runs policy experiments
+and its default packaged deadlock demo. The source stage READMEs preserve
+relevant relative links when copied into the archives.
 
-The ZIP builder produces executable A2 and Final archives. A2 excludes
-Final-only modules and runs independently. Both archives currently contain
-a generated entrypoint, Python package, and one-line placeholder README.
-They omit full documentation, samples, and tests. The packaged default
-deadlock demo lacks its input. Packaging exists, while complete submission
-assembly remains pending.
-
-The deprecated C++ implementation is not required to run the code or tests.
+The deprecated C++ implementation is not needed. Final presentation material,
+viva rehearsal, and the unrelated Final limitations remain separate work.
+Passing the stated tests is evidence for these examples, not a universal
+correctness or portability proof.
 
 \end{document}
